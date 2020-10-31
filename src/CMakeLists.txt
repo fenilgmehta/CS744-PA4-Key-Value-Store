@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
-project("PA_4_Key_Value_Store" C)
+project("PA_4_Key_Value_Store" CXX)
 
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_VERBOSE_MAKEFILE on)
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -8,6 +9,7 @@ set(CMAKE_VERBOSE_MAKEFILE on)
 # TODO: comment this when doing performance testing
 set(CMAKE_BUILD_TYPE Debug)
 
+# REFER: https://stackoverflow.com/questions/41361631/optimize-in-cmake-by-default
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
@@ -19,15 +21,15 @@ set(CMAKE_C_FLAGS_RELEASE "-O3")
 ## REFER: https://stackoverflow.com/questions/4765222/how-do-i-produce-only-an-object-file-o-from-a-cmake-build-target
 ## REFER: https://cmake.org/cmake/help/latest/command/add_library.html#object-libraries
 
-add_library(KVMessage.o         OBJECT   KVMessage.c KVMessage.h)
-add_library(KVMessageFormat.o   OBJECT   KVMessageFormat.c KVMessageFormat.h)
+add_library(KVMessage.o         OBJECT   KVMessage.cpp KVMessage.h)
+add_library(KVMessageFormat.o   OBJECT   KVMessageFormat.cpp KVMessageFormat.h)
 
-add_library(KVCache.o     OBJECT       KVCache.c KVCache.h)
-add_library(KVStore.o     OBJECT       KVStore.c KVStore.h)
-add_executable(KVServer KVServer.c $<TARGET_OBJECTS:KVCache.o> $<TARGET_OBJECTS:KVStore.o> $<TARGET_OBJECTS:KVMessage.o> $<TARGET_OBJECTS:KVMessageFormat.o>)
+add_library(KVCache.o     OBJECT       KVCache.cpp KVCache.h)
+add_library(KVStore.o     OBJECT       KVStore.cpp KVStore.h)
+add_executable(KVServer KVServer.cpp $<TARGET_OBJECTS:KVCache.o> $<TARGET_OBJECTS:KVStore.o> $<TARGET_OBJECTS:KVMessage.o> $<TARGET_OBJECTS:KVMessageFormat.o>)
 
-add_library(KVClientLibrary.o     OBJECT       KVClientLibrary.c KVClientLibrary.h)
-add_executable(KVClient KVClient.c $<TARGET_OBJECTS:KVClientLibrary.o> $<TARGET_OBJECTS:KVMessage.o> $<TARGET_OBJECTS:KVMessageFormat.o>)
+add_library(KVClientLibrary.o     OBJECT       KVClientLibrary.cpp KVClientLibrary.h)
+add_executable(KVClient KVClient.cpp $<TARGET_OBJECTS:KVClientLibrary.o> $<TARGET_OBJECTS:KVMessage.o> $<TARGET_OBJECTS:KVMessageFormat.o>)
 
 
 #add_library(MY_all_1.o     OBJECT       clock.c clock.h config.h fcyc.c fcyc.h fsecs.c fsecs.h ftimer.c ftimer.h mdriver.c memlib.c memlib.h mm1.c mm.h)
