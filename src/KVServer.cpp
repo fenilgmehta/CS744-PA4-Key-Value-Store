@@ -1,17 +1,17 @@
-#include <stdio.h>
-#include <stdint.h>
+#include <iostream>
+#include <cstdint>
 #include <pthread.h>
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-#include "KVCache.h"
-#include "KVStore.h"
-#include "MyVector.h"
+#include "MyVector.hpp"
+#include "KVCache.hpp"
+#include "KVStore.hpp"
+#include "MyDebugger.hpp"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 #pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
-MyVectorTemplate(int, _INT)
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -52,23 +52,43 @@ struct WorkerThreadInfo {
     pthread_t thread_obj;
 
     // Worker Thread will iterate through this vector for list of clients to serve using "epoll(...)"
-    struct MyVector_INT client_fds;
+    struct MyVector<int> client_fds;
 
     // Main Thread will insert new client File Descriptors to this vector and then the Worker Thread
     // will insert all the Client File Descriptors in this into "client_fds" at regular intervals.
-    struct MyVector_INT client_fds_new;
+    struct MyVector<int> client_fds_new;
 
     // Lock to ensure only one of Main Thread and Worker thread are working on "client_fds_new"
     pthread_mutex_t mutex_new_client_fds;
-} WorkerThreadInfo_DEFAULT;
 
-MyVectorTemplate(struct WorkerThreadInfo, _WorkerThreadInfo)
+    // REFER: https://stackoverflow.com/questions/30867779/correct-pthread-t-initialization-and-handling#:~:text=pthread_t%20is%20a%20C%20type,it%20true%20once%20pthread_create%20succeeds.
+    WorkerThreadInfo() :
+            thread_obj(),
+            client_fds(globalServerConfig.clients_per_thread),
+            client_fds_new(globalServerConfig.clients_per_thread),
+            mutex_new_client_fds() {
+        pthread_mutex_init(&(this->mutex_new_client_fds), nullptr);
+    }
+
+    ~WorkerThreadInfo() {
+        pthread_mutex_destroy(&(this->mutex_new_client_fds));
+    }
+
+    void start_thread() {
+        // TODO: write code to start the worker thread with "WorkerThreadInfo" pointer = ptr
+    }
+
+};
+
+struct WorkerThreadInfo WorkerThreadInfo_DEFAULT();
+
 
 void *worker_thread(void *ptr) {
-    struct WorkerThreadInfo *thread_conf = (struct WorkerThreadInfo *) ptr;
+    auto thread_conf = static_cast<struct WorkerThreadInfo *>(ptr);
+
     int32_t i;
 
-    while (1) {
+    while (true) {
         // TODO - Use epoll and serve clients using Cache
 
         // TODO - remove client File Descriptors whose connection has closed/ended
@@ -77,51 +97,35 @@ void *worker_thread(void *ptr) {
         if ((thread_conf->client_fds_new).n != 0) {
             // New clients have been assigned to this thread by the Main Thread
             for (i = 0; i < (thread_conf->client_fds_new).n; ++i) {
-                mv_push_back_INT(&(thread_conf->client_fds), (thread_conf->client_fds_new).arr[i]);
+                thread_conf->client_fds.push_back(thread_conf->client_fds_new.at(i));
             }
-            mv_clear_INT(&(thread_conf->client_fds_new));
+            thread_conf->client_fds_new.clear();
         }
         pthread_mutex_unlock(&(thread_conf->mutex_new_client_fds));
 
         break;  // TODO: remove this line
     }
 
-    return NULL;  // can modify this to return something else
-}
-
-void WorkerThreadInfo_init(struct WorkerThreadInfo *ptr) {
-    mv_init_INT(&(ptr->client_fds), globalServerConfig.clients_per_thread);
-    mv_init_INT(&(ptr->client_fds_new), globalServerConfig.clients_per_thread);
-    pthread_mutex_init(&(ptr->mutex_new_client_fds), NULL);
-}
-
-void WorkerThreadInfo_free(struct WorkerThreadInfo *ptr) {
-    mv_free_INT(&(ptr->client_fds));
-    mv_free_INT(&(ptr->client_fds_new));
-    pthread_mutex_destroy(&(ptr->mutex_new_client_fds));
-}
-
-void WorkerThreadInfo_start_thread(struct WorkerThreadInfo *ptr) {
-    // TODO: write code to start the worker thread with "WorkerThreadInfo" pointer = ptr
+    return nullptr;  // can modify this to return something else
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 
 void main_thread() {
+    log_info("Server initialization started...");
     read_server_config();
 
     // Create "globalServerConfig.thread_pool_size_initial" threads
-    struct MyVector_WorkerThreadInfo thread_pool;
-
     // 4 is multiplied to ensure sufficient space is there in the vector to accommodate for
     // future increase in the number of threads in the "thread_pool"
-    mv_init_WorkerThreadInfo(&thread_pool, 4 * globalServerConfig.thread_pool_size_initial);
-    for (int i = 0; i < globalServerConfig.thread_pool_size_initial; ++i) {
-        WorkerThreadInfo_init(&(thread_pool.arr[i]));
-        WorkerThreadInfo_start_thread(&(thread_pool.arr[i]));
-    }
+    struct MyVector<WorkerThreadInfo> thread_pool(4 * globalServerConfig.thread_pool_size_initial);
+
     // this will give better performance as compared to calling "push_back_default" multiple times
     thread_pool.n = globalServerConfig.thread_pool_size_initial;
+
+    for (int i = 0; i < globalServerConfig.thread_pool_size_initial; ++i) {
+        thread_pool.at(i).start_thread();
+    }
 
     // TODO: Setup a listening socket on a port specified in the config file
     // TODO: if "globalServerConfig.listening_port" is already in use, then print the error message and exit
@@ -134,7 +138,9 @@ void main_thread() {
 
     int client_fd_new;
 
-    while (1) {
+    log_success("Server initialization complete :)");
+
+    while (true) {
         // TODO
         // Perform accept() on the listening socket and pass each established connection
         // to one of the "thread_pool.n" threads using Round Robin fashion
@@ -151,7 +157,7 @@ void main_thread() {
             pthread_mutex_lock(mutex_to_test);
             if (thread_pool.arr[rr_idx_test].client_fds.n < globalServerConfig.clients_per_thread) {
                 // Assign the client connection to the worker thread "thread_pool.arr[rr_idx_test]"
-                mv_push_back_INT(&(thread_pool.arr[rr_idx_test].client_fds_new), client_fd_new);
+                thread_pool.at(rr_idx_test).client_fds_new.push_back(client_fd_new);
 
                 // unlock the mutex and exit the loop
                 pthread_mutex_unlock(mutex_to_test);
@@ -165,19 +171,19 @@ void main_thread() {
             rr_current_idx = rr_idx_test;
         } else {
             rr_current_idx = thread_pool.n;
-            mv_push_back_default_WorkerThreadInfo(&thread_pool);  // Add new "WorkerThreadInfo" object with default values to the vector
-            WorkerThreadInfo_init(&(thread_pool.arr[rr_current_idx]));  // Initialise the newly inserted "WorkerThreadInfo" object
+
+            // Add new "WorkerThreadInfo" object with default values to the vector
+            // Initialise the newly inserted "WorkerThreadInfo" object
+            thread_pool.push_back();
 
             // Insert the new client File Descriptor in "client_fds_new"
             // No need to acquire the lock as the Worker Thread for this object is not running
-            mv_push_back_INT(&(thread_pool.arr[rr_current_idx].client_fds_new), client_fd_new);
-            WorkerThreadInfo_start_thread(&(thread_pool.arr[rr_current_idx]));  // Start the Worker Thread
+            thread_pool.at(rr_current_idx).client_fds_new.push_back(client_fd_new);
+            thread_pool.at(rr_current_idx).start_thread();  // Start the Worker Thread
         }
 
         // break;  // TODO: remove this line
     }
-
-    mv_free_WorkerThreadInfo(&thread_pool);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

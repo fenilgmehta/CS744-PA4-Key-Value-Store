@@ -10,27 +10,63 @@ set(CMAKE_VERBOSE_MAKEFILE on)
 set(CMAKE_BUILD_TYPE Debug)
 
 # REFER: https://stackoverflow.com/questions/41361631/optimize-in-cmake-by-default
-if(NOT CMAKE_BUILD_TYPE)
+if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
-endif()
+endif ()
 
 set(CMAKE_C_FLAGS "-Wall -Wextra")
 set(CMAKE_C_FLAGS_DEBUG "-g")
 set(CMAKE_C_FLAGS_RELEASE "-O3")
 
+# ---------------------------------------------------------------------------------------------------------------------
+
 ## REFER: https://stackoverflow.com/questions/4765222/how-do-i-produce-only-an-object-file-o-from-a-cmake-build-target
 ## REFER: https://cmake.org/cmake/help/latest/command/add_library.html#object-libraries
 
-add_library(KVMessage.o         OBJECT   KVMessage.cpp KVMessage.h)
-add_library(KVMessageFormat.o   OBJECT   KVMessageFormat.cpp KVMessageFormat.h)
+add_library(MyVector.o OBJECT MyVector.hpp)
+add_library(KVMessage.o OBJECT KVMessage.hpp)
+add_library(KVMessageFormat.o OBJECT KVMessageFormat.hpp)
+add_library(MyDebugger.o OBJECT MyDebugger.hpp)
 
-add_library(KVCache.o     OBJECT       KVCache.cpp KVCache.h)
-add_library(KVStore.o     OBJECT       KVStore.cpp KVStore.h)
-add_executable(KVServer KVServer.cpp $<TARGET_OBJECTS:KVCache.o> $<TARGET_OBJECTS:KVStore.o> $<TARGET_OBJECTS:KVMessage.o> $<TARGET_OBJECTS:KVMessageFormat.o>)
+add_library(KVCache.o OBJECT KVCache.cpp KVCache.hpp)
+add_library(KVStore.o OBJECT KVStore.cpp KVStore.hpp)
+add_executable(
+        KVServer
+        KVServer.cpp
+        $<TARGET_OBJECTS:MyVector.o>
+        $<TARGET_OBJECTS:KVCache.o>
+        $<TARGET_OBJECTS:KVStore.o>
+        $<TARGET_OBJECTS:KVMessage.o>
+        $<TARGET_OBJECTS:KVMessageFormat.o>
+        $<TARGET_OBJECTS:MyDebugger.o>
+)
 
-add_library(KVClientLibrary.o     OBJECT       KVClientLibrary.cpp KVClientLibrary.h)
-add_executable(KVClient KVClient.cpp $<TARGET_OBJECTS:KVClientLibrary.o> $<TARGET_OBJECTS:KVMessage.o> $<TARGET_OBJECTS:KVMessageFormat.o>)
+add_library(KVClientLibrary.o OBJECT KVClientLibrary.cpp KVClientLibrary.hpp)
+add_executable(
+        KVClient
+        KVClient.cpp
+        $<TARGET_OBJECTS:KVClientLibrary.o>
+        $<TARGET_OBJECTS:KVMessage.o>
+        $<TARGET_OBJECTS:KVMessageFormat.o>
+)
 
+# ---------------------------------------------------------------------------------------------------------------------
+
+# NOTE: apply compile time DEFINITION to debugger
+# REFER: https://cmake.org/cmake/help/v3.0/command/if.html
+if (CMAKE_BUILD_TYPE STREQUAL Debug)
+    MESSAGE(STATUS "CMAKE_BUILD_TYPE = \"${CMAKE_BUILD_TYPE}\"")
+
+    # REFER: https://stackoverflow.com/questions/9017573/define-preprocessor-macro-through-cmake
+    # add_definitions(-DDEBUGGING_ON)
+
+    # REFER: https://cmake.org/cmake/help/latest/command/target_compile_definitions.html
+    # target_compile_definitions(MyDebugger.o PUBLIC DEBUGGING_ON)  # TODO: uncomment this
+    MESSAGE(STATUS "\"DEBUGGING_ON\" flag set :)")
+
+endif ()
+
+# ---------------------------------------------------------------------------------------------------------------------
 
 #add_library(MY_all_1.o     OBJECT       clock.c clock.h config.h fcyc.c fcyc.h fsecs.c fsecs.h ftimer.c ftimer.h mdriver.c memlib.c memlib.h mm1.c mm.h)
 #add_library(MY_all_1.o     OBJECT       clock.c clock.h config.h fcyc.c fcyc.h fsecs.c fsecs.h ftimer.c ftimer.h mdriver.c memlib.c memlib.h mm1.c mm.h)
