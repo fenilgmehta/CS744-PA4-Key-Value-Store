@@ -52,6 +52,8 @@ add_executable(
         $<TARGET_OBJECTS:KVMessageFormat.o>
 )
 
+add_executable(Testing Testing.cpp)
+
 # ---------------------------------------------------------------------------------------------------------------------
 
 # NOTE: apply compile time DEFINITION to debugger
