@@ -4,6 +4,8 @@ project("PA_4_Key_Value_Store" CXX)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_VERBOSE_MAKEFILE on)
 
+# REFER: Introduction to the basics  -  https://cliutils.gitlab.io/modern-cmake/chapters/basics.html
+
 # ---------------------------------------------------------------------------------------------------------------------
 
 # TODO: comment this when doing performance testing
@@ -28,8 +30,8 @@ add_library(KVMessage.o OBJECT KVMessage.hpp)
 add_library(KVMessageFormat.o OBJECT KVMessageFormat.hpp)
 add_library(MyDebugger.o OBJECT MyDebugger.hpp)
 
-add_library(KVCache.o OBJECT KVCache.cpp KVCache.hpp)
-add_library(KVStore.o OBJECT KVStore.cpp KVStore.hpp)
+add_library(KVCache.o OBJECT KVCache.hpp)
+add_library(KVStore.o OBJECT KVStore.hpp)
 add_executable(
         KVServer
         KVServer.cpp
@@ -41,7 +43,7 @@ add_executable(
         $<TARGET_OBJECTS:MyDebugger.o>
 )
 
-add_library(KVClientLibrary.o OBJECT KVClientLibrary.cpp KVClientLibrary.hpp)
+add_library(KVClientLibrary.o OBJECT KVClientLibrary.hpp)
 add_executable(
         KVClient
         KVClient.cpp
