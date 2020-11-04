@@ -27,12 +27,7 @@
     - [PintOS code](http://people.cs.ksu.edu/~bstinson/courses/cis520/grandepintos.proj1/threads/synch.c)
 - [How to make a circular queue thread safe](https://stackoverflow.com/questions/15751410/how-do-i-make-a-circular-queue-thread-safe)
 
----
+### Special Care to be Taken
+- When working with multi-threaded program, take care not to allow everyone to modify any file/data structure at the same time and make it inconsistent
+- When working with locks, take care not to get into deadlock
 
-- https://stackoverflow.com/questions/11546791/what-is-the-best-hash-function-for-rabin-karp-algorithm
-- https://ndportmann.com/load-balancing-perf/
-
-- http://www.cplusplus.com/reference/atomic/atomic/compare_exchange_strong/
-
-- https://en.cppreference.com/w/cpp/atomic/atomic_compare_exchange
-- https://en.cppreference.com/w/cpp/atomic/atomic_exchange
