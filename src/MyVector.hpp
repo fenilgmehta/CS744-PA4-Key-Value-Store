@@ -8,108 +8,78 @@
 
 template<typename T>
 struct MyVector {
-    int32_t n{}, nMax{};
+    size_t n{}, nMax{};
     T *arr;
 
-    explicit MyVector(size_t);
+    /* Constructor */
+    explicit MyVector(const size_t n) : n{0}, nMax{n} {
+        this->arr = static_cast<T *>(malloc(n * sizeof(T)));
+    }
 
-    T &at(size_t);
+    inline T &at(const size_t idx) {
+        return this->arr[idx];
+    }
 
-    bool push_back();
+    /* RETURNS: true if push_back was successful */
+    bool push_back() {
+        if (this->n == this->nMax) {
+            if (not(this->resize(this->nMax * 2))) {
+                /* if resize fails */
+                return false;
+            }
+        }
+        this->n += 1;
+        return true;
+    }
 
-    bool push_back(T);
+    /* RETURNS: true if push_back was successful */
+    bool push_back(T val) {
+        if (this->n == this->nMax) {
+            if (not(this->resize(this->nMax * 2))) {
+                /* if resize fails */
+                return false;
+            }
+        }
+        this->arr[this->n] = val;
+        this->n += 1;
+        return true;
+    }
 
-    T &pop_back();
+    /* RETURNS: the last element popped */
+    inline T &pop_back() {
+        if (this->n <= 1) this->n = 0;
+        else this->n -= 1;
+        return this->arr[this->n];
+    }
 
-    T &pop_back(size_t);
+    /* RETURNS: the last element popped */
+    inline T &pop_back(const size_t popCount) {
+        if (popCount <= 0) return this->arr[0];
+        if (this->n <= popCount) this->n = 0;
+        else this->n -= popCount;
+        return this->arr[this->n];
+    }
 
-    void clear();
+    /* Removes all elements from the vector */
+    inline void clear() {
+        this->n = 0;
+    }
 
-    bool resize(size_t);
+    /* RETURNS: true if resize was successful */
+    bool resize(const size_t newSize) {
+        T *arrNew = static_cast<T *>(realloc(this->arr, sizeof(T) * newSize));
+        if (arrNew != NULL) {
+            this->arr = arrNew;
+            this->nMax = newSize;
+        }
+        return arrNew != NULL;
+    }
 
-    ~MyVector();
+    /* Destructor */
+    ~MyVector() {
+        free(this->arr);
+    }
 };
-
-/* Constructor */
-template<typename T>
-MyVector<T>::MyVector(size_t n) {
-    this->n = 0;
-    this->nMax = n;
-    this->arr = static_cast<T *>(malloc(n * sizeof(T)));
-}
-
-template<typename T>
-inline T &MyVector<T>::at(size_t idx) {
-    return this->arr[idx];
-}
-
-/* RETURNS: true if push_back was successful */
-template<typename T>
-bool MyVector<T>::push_back() {
-    if (this->n == this->nMax) {
-        if (not(this->resize(this->nMax * 2))) {
-            /* if resize fails */
-            return false;
-        }
-    }
-    this->n += 1;
-    return true;
-}
-
-/* RETURNS: true if push_back was successful */
-template<typename T>
-bool MyVector<T>::push_back(T val) {
-    if (this->n == this->nMax) {
-        if (not(this->resize(this->nMax * 2))) {
-            /* if resize fails */
-            return false;
-        }
-    }
-    this->arr[this->n] = val;
-    this->n += 1;
-    return true;
-}
-
-/* RETURNS: the last element popped */
-template<typename T>
-inline T &MyVector<T>::pop_back() {
-    if (this->n <= 1) this->n = 0;
-    else this->n -= 1;
-    return this->arr[this->n];
-}
-
-/* RETURNS: the last element popped */
-template<typename T>
-inline T &MyVector<T>::pop_back(size_t popCount) {
-    if (popCount <= 0) return this->arr[0];
-    if (this->n <= popCount) this->n = 0;
-    else this->n -= popCount;
-    return this->arr[this->n];
-}
-
-
-/* Removes all elements from the vector */
-template<typename T>
-inline void MyVector<T>::clear() {
-    this->n = 0;
-}
-
-/* RETURNS: true if resize was successful */
-template<typename T>
-bool MyVector<T>::resize(size_t newSize) {
-    T *arrNew = static_cast<T *>(realloc(this->arr, sizeof(T) * newSize));
-    if (arrNew != NULL) {
-        this->arr = arrNew;
-        this->nMax = newSize;
-    }
-    return arrNew != NULL;
-}
-
-/* Destructor */
-template<typename T>
-MyVector<T>::~MyVector() {
-    free(this->arr);
-}
 
 
 #endif // PA_4_KEY_VALUE_STORE_MYVECTOR_H
