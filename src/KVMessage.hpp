@@ -5,25 +5,23 @@
 
 #define KV_STR_LEN 256
 
-struct KVMessageHash {
-    uint64_t hash1, hash2;
-
-    KVMessageHash() : hash1{}, hash2{} {}
-};
-
 struct KVMessage {
     uint8_t status_code;
     char key[256], value[256];
+    uint64_t hash1, hash2;
 
-    KVMessage() : status_code{}, key{}, value{} {}
+    KVMessage() : status_code{}, key{}, value{}, hash1{0}, hash2{0} {}
 
-    struct KVMessageHash get_key_hash() const {
+    void calculate_key_hash() {
+        // if value of any hash is non-zero, then return, because it means that it has been calculated in the past
+        if (hash1 != 0 || hash2 != 0) return;
+
         /* 
          * For hash1:
-         *     My custom implementation which is mix of hash2 algorithm and XOR
-         *     
-         * For hash2:
          *     REFER: https://stackoverflow.com/questions/11546791/what-is-the-best-hash-function-for-rabin-karp-algorithm
+         *
+         * For hash2:
+         *     My custom implementation which is mix of hash1 algorithm and XOR
          *
          * "random_nums" is generated using the below Python Code:
          * >>> import random
@@ -45,26 +43,23 @@ struct KVMessage {
 
         // REFER: https://stackoverflow.com/questions/12773257/does-auto-type-assignments-of-a-pointer-in-c11-require
         auto p = reinterpret_cast<const unsigned char *>(key);
-        struct KVMessageHash hash;
         int i;
 
         for (i = 0; i < KV_STR_LEN; i++) {
-            hash.hash1 = 33 * hash.hash1 + (random_nums[i] * p[i]);
-            hash.hash2 = 33 * hash.hash2 + p[i];
+            hash1 = 33 * hash1 + p[i];
+            hash2 = 33 * hash2 + (random_nums[i] * p[i]);
         }
-
-        return hash;
     }
 
-    inline bool is_req_GET() const { return status_code == 1; }
+    [[nodiscard]] inline bool is_req_GET() const { return status_code == 1; }
 
-    inline bool is_req_PUT() const { return status_code == 2; }
+    [[nodiscard]] inline bool is_req_PUT() const { return status_code == 2; }
 
-    inline bool is_req_DEL() const { return status_code == 3; }
+    [[nodiscard]] inline bool is_req_DEL() const { return status_code == 3; }
 
-    inline bool is_req_SUCCESS() const { return status_code == 200; }
+    [[nodiscard]] inline bool is_req_SUCCESS() const { return status_code == 200; }
 
-    inline bool is_req_ERROR() const { return status_code == 240; }
+    [[nodiscard]] inline bool is_req_ERROR() const { return status_code == 240; }
 };
 
 #endif // PA_4_KEY_VALUE_STORE_KVMESSAGE_HPP
