@@ -1,31 +1,37 @@
 #include <iostream>
 #include <cstdint>
-#include <vector>
 #include <fstream>
 #include <sys/stat.h>
 
 #include "MyDebugger.hpp"
 #include "KVClientLibrary.hpp"
 #include "KVMessage.hpp"
+#include "MyVector.hpp"
 
 using namespace std;
 
 
 /* Used for load testing */
-void start_sending_requests(const vector<KVMessage> &dataset, const char *server_ip = "127.0.0.1", const char *server_port = "12345") {
+void start_sending_requests(const MyVector<KVMessage> &dataset, const char *server_ip = "127.0.0.1",
+                            const char *server_port = "12345") {
 #ifdef DEBUGGING_ON
+    log_info("-----+-----+-----", true);
+    log_info(string() + "IP Address = " + server_ip);
+    log_info(string() + "Port Number = " + server_port);
     log_info("-----+-----+-----");
     log_info(dataset.size());
-    for (auto i: dataset) {
-        log_info(string("") + to_string((int) i.status_code) + " " + i.key + " " + i.value);
+    for (int64_t i = 0; i < dataset.n; ++i) {
+        log_info(string("") + to_string((int) dataset.at(i).status_code) + " " + dataset.at(i).key + " " +
+                 dataset.at(i).value);
     }
     log_info("-----+-----+-----");
 #endif
 
-    // TODO: replace static values with "server_ip" and "server_port"
     ClientServerConnection connection(server_ip, server_port);
     int request_number = 1;
-    for (auto &i: dataset) {
+    for (int64_t j = 0; j < dataset.n; ++j) {
+        const KVMessage &i = dataset.at(j);
+
         log_info(string("Working on Request Number = ") + to_string(request_number));
         ++request_number;
 
@@ -34,7 +40,8 @@ void start_sending_requests(const vector<KVMessage> &dataset, const char *server
             case 1:
                 connection.GET(i);
                 if (not equal(i.value, i.value + 256, connection.resultValue)) {
-                    log_error("*** Server response was not consistent with what was expected if this is the only client updating the server, or if all clients are making request for different keys ***");
+                    log_error(
+                            "*** Server response was not consistent with what was expected if this is the only client updating the server, or if all clients are making request for different keys ***");
                 }
                 break;
             case 2:
@@ -54,7 +61,7 @@ inline bool file_exists(const char *name) {
     return (stat(name, &buffer) == 0);
 }
 
-vector<KVMessage> load_client_request_dataset(char *filename) {
+MyVector<KVMessage> load_client_request_dataset(char *filename) {
     if (not file_exists(filename)) {
         log_error(string("") + "FILE not found: \"" + filename + "\"");
         exit(1);
@@ -73,7 +80,9 @@ vector<KVMessage> load_client_request_dataset(char *filename) {
     fileReader >> requestCount;
     log_info(string("Request Count = ") + to_string(requestCount));
 
-    vector<KVMessage> dataset(requestCount);
+    MyVector<KVMessage> dataset(requestCount);  // the constructor reserves the space required
+    dataset.n = requestCount;  // change the size as we will directly set elements in the below loop
+
     uint32_t request_type;
     struct KVMessage temp;
     for (int i = 0; i < requestCount; ++i) {
@@ -88,7 +97,7 @@ vector<KVMessage> load_client_request_dataset(char *filename) {
         temp.status_code = request_type;
         fileReader >> temp.key;
         if (request_type == 2) fileReader >> temp.value;  // "Value" is only required for PUT requests
-        dataset[i] = temp;
+        dataset.at(i) = temp;
     }
 
     fileReader.close();
@@ -99,13 +108,15 @@ int main(int argc, char *argv[]) {
     // REFER: https://www.geeksforgeeks.org/command-line-arguments-in-c-cpp/
     if (argc == 4) {
         log_info("Loading client requests dataset...", true);
-        vector<KVMessage> dataset = load_client_request_dataset(argv[1]);
+        MyVector<KVMessage> dataset = load_client_request_dataset(argv[1]);
         log_info("Loading successfully complete\n");
 
+#ifdef DEBUGGING_ON
         // TODO: comment this when using Bash/Python script to launch multiple clients
         // REFER: https://stackoverflow.com/questions/903221/press-enter-to-continue
         cout << "Press Enter to Continue";
         cin.ignore();
+#endif
 
         // TODO: add technique to measure execution time
         start_sending_requests(dataset, argv[2], argv[3]);

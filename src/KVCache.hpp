@@ -45,8 +45,6 @@ REFER: cachelib
 	- https://github.com/ksholla20/cachelib/tree/V1.0
 */
 
-#define HASH_TABLE_LEN 16383
-
 struct CacheNodeCircularQueuePtr {
     // REFER:
     //     https://cppstdx.readthedocs.io/en/latest/shared_mutex.html

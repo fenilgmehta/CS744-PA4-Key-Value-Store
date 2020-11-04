@@ -30,6 +30,7 @@ add_library(KVMessage.o OBJECT KVMessage.hpp)
 add_library(KVMessageFormat.o OBJECT KVMessageFormat.hpp)
 add_library(MyDebugger.o OBJECT MyDebugger.hpp)
 add_library(MyMemoryPool.o OBJECT MyMemoryPool.hpp)
+add_library(KVStoreFileNames.o OBJECT KVStoreFileNames.hpp)
 
 add_library(KVCache.o OBJECT KVCache.hpp)
 add_library(KVStore.o OBJECT KVStore.hpp)

@@ -42,6 +42,8 @@ void read_server_config() {
 
 void server_init() {
     // Initialize the cache,
+    kvPersistentStore.init_kvstore();
+
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -128,6 +130,7 @@ void main_thread() {
 
     // TODO: Setup a listening socket on a port specified in the config file
     // TODO: if "globalServerConfig.listening_port" is already in use, then print the error message and exit
+    // REFER: https://stackoverflow.com/questions/16486361/creating-a-basic-c-c-tcp-socket-writer
 
     // rr_current_idx - the last "WorkerThreadInfo" index which was used to add the last client request received
     // rr_idx_test - used to store the index of the "WorkerThreadInfo" which is to be tested for assigning the new client
