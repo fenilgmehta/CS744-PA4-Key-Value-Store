@@ -3,56 +3,70 @@
 
 #include <iostream>
 
+
+// REFER: https://stackoverflow.com/questions/2616906/how-do-i-output-coloured-text-to-a-linux-terminal
+enum Code {
+    FG_RED      = 31,
+    FG_GREEN    = 32,
+    FG_YELLOW   = 33,
+    FG_BLUE     = 34,
+    FG_DEFAULT  = 39,
+
+    BG_RED      = 41,
+    BG_GREEN    = 42,
+    BG_YELLOW   = 43,
+    BG_BLUE     = 44,
+    BG_DEFAULT  = 49
+};
+
+#define color(enum_code) "\033[" << enum_code << "m"
+
+
 // TODO: comment this line when doing performance testing and when using IDE CmakeLists.txt
 #define DEBUGGING_ON
 
 #ifdef DEBUGGING_ON
 
-    // REFER: https://stackoverflow.com/questions/2616906/how-do-i-output-coloured-text-to-a-linux-terminal
-    enum Code {
-        FG_RED      = 31,
-        FG_GREEN    = 32,
-        FG_YELLOW   = 33,
-        FG_BLUE     = 34,
-        FG_DEFAULT  = 39,
-
-        BG_RED      = 41,
-        BG_GREEN    = 42,
-        BG_YELLOW   = 43,
-        BG_BLUE     = 44,
-        BG_DEFAULT  = 49
-    };
-
-    #define color(enum_code) "\033[" << enum_code << "m"
-
-    /* Red message */
-    void log_error(const char* msg){
-        std::cerr << color(FG_RED) << "ERROR: " << color(FG_DEFAULT) << msg << std::endl;
-    }
-
     /* Yellow message */
-    void log_warning(const char* msg){
+    template <typename T>
+    void log_warning(const T& msg, bool prependNewLine = false){
+        if(prependNewLine) std::cerr << "\n";
         std::cerr << color(FG_YELLOW) << "ERROR: " << color(FG_DEFAULT) << msg << std::endl;
+        std::cerr.flush();
     }
 
     /* Blue message */
-    void log_info(const char* msg){
-        std::cout << color(FG_BLUE) << "ERROR: " << color(FG_DEFAULT) << msg << std::endl;
+    template <typename T>
+    void log_info(const T& msg, bool prependNewLine = false){
+        if(prependNewLine) std::cout << "\n";
+        std::cout << color(FG_BLUE) << "INFO: " << color(FG_DEFAULT) << msg << std::endl;
+        std::cout.flush();
     }
 
     /* Green message */
-    void log_success(const char* msg){
+    template <typename T>
+    void log_success(const T& msg, bool prependNewLine = false){
+        if(prependNewLine) std::cout << "\n";
         std::cout << color(FG_GREEN) << "ERROR: " << color(FG_DEFAULT) << msg << std::endl;
+        std::cout.flush();
     }
 
-    #undef color
-
 #else
-    #define log_NO_ACTION(...)
-    #define log_error(...) log_NO_ACTION()
-    #define log_warning(...) log_NO_ACTION()
-    #define log_info(...) log_NO_ACTION()
-    #define log_success(...) log_NO_ACTION()
+    #define log_warning(...) ;
+    #define log_info(...) ;
+    #define log_success(...) ;
 #endif
+
+
+/* Red message */
+template <typename T>
+void log_error(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false){
+    if(prependNewLine) std::cerr << "\n";
+    std::cerr << color(FG_RED) << "ERROR: " << color(FG_DEFAULT) << msg << std::endl;
+    if(appendExtraNewLine) std::cerr << "\n";
+    std::cerr.flush();
+}
+
+#undef color
 
 #endif // PA_4_KEY_VALUE_STORE_MYDEBUGGER_H
