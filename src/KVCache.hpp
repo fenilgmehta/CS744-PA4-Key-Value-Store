@@ -1,10 +1,13 @@
 #ifndef PA_4_KEY_VALUE_STORE_KVCACHE_HPP
 #define PA_4_KEY_VALUE_STORE_KVCACHE_HPP
 
+#include <shared_mutex>
+#include <atomic>
+
 #include "MyDebugger.hpp"
+#include "MyVector.hpp"
 #include "KVMessage.hpp"
 #include "KVStore.hpp"
-
 /*
 
 ### C++ function
@@ -42,11 +45,112 @@ REFER: cachelib
 	- https://github.com/ksholla20/cachelib/tree/V1.0
 */
 
-#define HASH_TABLE_LEN
+#define HASH_TABLE_LEN 16383
 
+struct CacheNodeCircularQueuePtr {
+    // REFER:
+    //     https://cppstdx.readthedocs.io/en/latest/shared_mutex.html
+    //     https://en.cppreference.com/w/cpp/thread/shared_mutex
+    //     http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2012/n3427.html
+    //     https://cppstdx.readthedocs.io/en/latest/shared_mutex.html#_CPPv211shared_lock
+    std::shared_mutex rw_lock;
+    struct CacheNode *head, *tail;
 
+    CacheNodeCircularQueuePtr() : rw_lock(), head{nullptr}, tail{nullptr} {}
+};
+
+struct CacheNode {
+    struct KVMessage *message;
+    struct CacheNode *left, *right;
+    struct CacheNode *prev, *next;
+    bool dirtyBit;  // if true, then it needs to be written back to the Persistent Storage
+
+    /* Release memory which was allocated to "KVMessage" either by the "KVServer" or "KVCache" */
+    void free_node() {
+        free(message);
+    }
+};
+
+/*
+ * • It is assumed that KVMessage pointer has proper values for both Key and Value
+ * • Cache size is at-least 𝟭𝟬𝟮𝟰 otherwise, there is performance loss
+ *
+ * */
 struct KVCache {
-    
+    uint64_t n;
+    MyVector<CacheNodeCircularQueuePtr> hashTable, evictionTable;
+    std::atomic_uint64_t evictionIdx;  // REFER: https://stackoverflow.com/questions/31978324/what-exactly-is-stdatomic
+
+    KVCache(uint64_t cache_size) :
+            n{cache_size},
+            hashTable(16383),
+            evictionTable((cache_size > 10240) ? 128 : ((1024 <= cache_size && cache_size < 10240) ? 32 : 1)),
+            evictionIdx(0) {
+        // TODO - implement the constructor
+    }
+
+    struct KVMessage *cache_GET(struct KVMessage *ptr) {
+        ptr->calculate_key_hash();
+
+        // TODO
+        // dirty bit remain UNCHANGED
+    }
+
+    void cache_PUT(struct KVMessage *ptr) {
+        ptr->calculate_key_hash();
+
+        // TODO
+        // if cache is full, remove 5 % entries and save them to storage
+
+        // SET dirty bit to true
+    }
+
+    struct KVMessage *cache_DELETE(struct KVMessage *ptr) {
+        ptr->calculate_key_hash();
+
+        // TODO
+        // Write to Persistent storage if dirty bit of a CacheNode is true
+    }
+
+private:
+    CacheNodeCircularQueuePtr get_next_eviction_queue() {
+        // --- REFER: https://stackoverflow.com/questions/33554255/c-thread-safe-increment-with-modulo-without-mutex-using-stdatomic
+        // --- REFER: https://stackoverflow.com/questions/31978324/what-exactly-is-stdatomic
+
+        // --- TIME = ~1.9 seconds (for Threads=100, Loop=100000)
+        // --- EXPLANATION: The function will work just like below 4 lines
+        // std::mutex m;
+        // m.lock();
+        // global = (global + 1) % MOD_VAL;
+        // m.unlock();
+
+        // --- IMPORTANT
+        // std::atomic_uint32_t global(0);
+
+        // How to make this operation atomic?
+        uint64_t index = evictionIdx++;
+        uint64_t id = index % evictionTable.n;
+
+        // Move ahead if only a single element is present
+        while (evictionTable.at(id).head == evictionTable.at(id).tail) {
+            index = evictionIdx++;
+            id = index % evictionTable.n;
+        }
+
+        // If size could wrap, then re-write the modulo value.
+        // oldValue keeps getting re-read.
+        // modulo occurs when nothing else updates it.
+        uint64_t oldValue = evictionIdx;
+        uint64_t newValue = oldValue % evictionTable.n;
+
+        // --- TIME = ~1.2 seconds (for Threads=100, Loop=100000)
+        while (!evictionIdx.compare_exchange_weak(oldValue, newValue, std::memory_order_relaxed))
+            newValue = oldValue % evictionTable.n;
+
+        // return id;
+        return evictionTable[id];
+    }
+
 };
 
 #endif // PA_4_KEY_VALUE_STORE_KVCACHE_HPP
