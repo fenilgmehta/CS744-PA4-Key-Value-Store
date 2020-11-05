@@ -1,6 +1,10 @@
 #include <iostream>
 #include <cstdint>
 #include <pthread.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <string.h>
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -14,6 +18,7 @@
 #pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
 
 // ---------------------------------------------------------------------------------------------------------------------
+void *worker_thread(void *);
 
 struct ServerConfig {
     // REFER: https://www.geeksforgeeks.org/enumeration-enum-c/
@@ -71,7 +76,8 @@ struct WorkerThreadInfo {
             kv_cache{kvCache} {}
 
     void start_thread() {
-        // TODO: write code to start the worker thread with "WorkerThreadInfo" pointer = ptr
+		// TODO: write code to start the worker thread with "WorkerThreadInfo" pointer = ptr
+		pthread_create(&thread_obj, NULL, worker_thread, (void*)this);
     }
 
 };
@@ -146,6 +152,32 @@ void main_thread() {
     }
 
     // TODO: Setup a listening socket on a port specified in the config file
+
+    int sockfd;
+    struct sockaddr_in servaddr, cli_addr;
+
+    // socket create and verification
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1) {
+    	std::cerr << "Socket creation failed...\n";
+        exit(0);
+    }
+    memset(&servaddr, 0, sizeof(servaddr));
+    // assign IP, PORT
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_port = htons(globalServerConfig.listening_port);
+
+    // Binding newly created socket to given IP and verification
+    if ((bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr))) != 0) {
+    	std::cerr << "Socket bind failed...\n";
+        exit(0);
+    }
+    // Now server is ready to listen and verification
+    if ((listen(sockfd, 1024)) != 0) {
+    	std::cerr << "Listen failed...\n";
+        exit(0);
+    }
     // TODO: if "globalServerConfig.listening_port" is already in use, then print the error message and exit
     // REFER: https://stackoverflow.com/questions/16486361/creating-a-basic-c-c-tcp-socket-writer
 
@@ -156,6 +188,7 @@ void main_thread() {
     int rr_success;
 
     int client_fd_new;
+    unsigned int clilen;
 
     log_success("Server initialization complete :)");
 
@@ -163,8 +196,12 @@ void main_thread() {
         // TODO
         // Perform accept() on the listening socket and pass each established connection
         // to one of the "thread_pool.n" threads using Round Robin fashion
-        client_fd_new = 1;  // TODO: replace "1" with the code to get the client connection File Descriptor
-
+        //client_fd_new = 1;  // TODO: replace "1" with the code to get the client connection File Descriptor
+    	clilen = sizeof(cli_addr);
+    	client_fd_new = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
+    	if(client_fd_new < 0){
+    		std::cerr << "Failed to accept client...";
+    	}
         // Assign the client to one of the threads in the "thread_pool"
         rr_current_idx = (rr_current_idx + 1) % thread_pool.n;
         rr_success = 0;
