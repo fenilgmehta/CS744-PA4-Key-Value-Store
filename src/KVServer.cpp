@@ -7,6 +7,7 @@
 #include "MyDebugger.hpp"
 #include "MyVector.hpp"
 #include "KVCache.hpp"
+#include "MyMemoryPool.hpp"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -14,13 +15,13 @@
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-// REFER: https://www.geeksforgeeks.org/enumeration-enum-c/
-enum CacheReplacementPolicyType {
-    CacheTypeLRU, // Will be implemented for the assignment
-    CacheTypeLFU  // Will NOT be implemented for the assignment
-};
-
 struct ServerConfig {
+    // REFER: https://www.geeksforgeeks.org/enumeration-enum-c/
+    enum CacheReplacementPolicyType {
+        CacheTypeLRU, // Will be implemented for the assignment
+        CacheTypeLFU  // Will NOT be implemented for the assignment
+    };
+
     int32_t listening_port;
     int32_t thread_pool_size_initial;
     int32_t thread_pool_growth;
@@ -29,22 +30,16 @@ struct ServerConfig {
 
     // Of NO use as only one Cache Replacement Policy will be implemented for the Assignment
     enum CacheReplacementPolicyType cache_replacement_policy;
-} globalServerConfig;
 
-/* Read config file "KVServer.conf" and store the values in "globalServerConfig" */
-void read_server_config() {
-    static const char CONFIG_FILE[] = "KVServer.conf";
+    ServerConfig() = default;
 
-    // TODO: write code to read "CONFIG_FILE" and store the values in "globalServerConfig"
-    // Key comes before "=", and Value comes after "="
-    // Each Key-Value pair is newline ("\n") separated
-}
-
-void server_init() {
-    // Initialize the cache,
-    kvPersistentStore.init_kvstore();
-
-}
+    /* Read config file "KVServer.conf" and store the values in "globalServerConfig" */
+    void read_server_config(const char *configFile = "KVServer.conf") {
+        // TODO: write code to read "CONFIG_FILE" and store the values in "globalServerConfig"
+        // Key comes before "=", and Value comes after "="
+        // Each Key-Value pair is newline ("\n") separated
+    }
+};
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -60,20 +55,20 @@ struct WorkerThreadInfo {
     struct MyVector<int> client_fds_new;
 
     // Lock to ensure only one of Main Thread and Worker thread are working on "client_fds_new"
-    pthread_mutex_t mutex_new_client_fds;
+    // std::mutex is faster than pthread_mutex_t when tested
+    std::mutex mutex_new_client_fds;
+
+    MemoryPool<KVMessage> *pool_manager;
+    KVCache *kv_cache;
 
     // REFER: https://stackoverflow.com/questions/30867779/correct-pthread-t-initialization-and-handling#:~:text=pthread_t%20is%20a%20C%20type,it%20true%20once%20pthread_create%20succeeds.
-    WorkerThreadInfo() :
+    explicit WorkerThreadInfo(int32_t clientsPerThread, MemoryPool<KVMessage> *poolManager, KVCache *kvCache) :
             thread_obj(),
-            client_fds(globalServerConfig.clients_per_thread),
-            client_fds_new(globalServerConfig.clients_per_thread),
-            mutex_new_client_fds() {
-        pthread_mutex_init(&(this->mutex_new_client_fds), nullptr);
-    }
-
-    ~WorkerThreadInfo() {
-        pthread_mutex_destroy(&(this->mutex_new_client_fds));
-    }
+            client_fds(clientsPerThread),
+            client_fds_new(clientsPerThread),
+            mutex_new_client_fds(),
+            pool_manager{poolManager},
+            kv_cache{kvCache} {}
 
     void start_thread() {
         // TODO: write code to start the worker thread with "WorkerThreadInfo" pointer = ptr
@@ -94,7 +89,7 @@ void *worker_thread(void *ptr) {
 
         // TODO - remove client File Descriptors whose connection has closed/ended
 
-        pthread_mutex_lock(&(thread_conf->mutex_new_client_fds));
+        thread_conf->mutex_new_client_fds.lock();
         if ((thread_conf->client_fds_new).n != 0) {
             // New clients have been assigned to this thread by the Main Thread
             for (i = 0; i < (thread_conf->client_fds_new).n; ++i) {
@@ -102,7 +97,7 @@ void *worker_thread(void *ptr) {
             }
             thread_conf->client_fds_new.clear();
         }
-        pthread_mutex_unlock(&(thread_conf->mutex_new_client_fds));
+        thread_conf->mutex_new_client_fds.unlock();
 
         break;  // TODO: remove this line
     }
@@ -113,8 +108,27 @@ void *worker_thread(void *ptr) {
 // ---------------------------------------------------------------------------------------------------------------------
 
 void main_thread() {
-    log_info("Server initialization started...");
-    read_server_config();
+    log_info("+ Server initialization started...");
+
+    log_info("    [1/3] Reading server config");
+    ServerConfig globalServerConfig{};
+    globalServerConfig.read_server_config();
+
+    log_info("    [2/3] Initializing memory pool");
+    MemoryPool<KVMessage> globalPoolKVMessage;
+    globalPoolKVMessage.init(
+            globalServerConfig.thread_pool_size_initial * globalServerConfig.clients_per_thread
+    );
+
+    log_info("    [3/4] Initializing Persistent Storage (Hard disk) helpers");
+    kvPersistentStore.init_kvstore();  // This is present in KVStore.hpp
+
+    log_info("    [4/4] Initializing Cache");
+    KVCache globalKVCache(globalServerConfig.cache_size);
+
+    log_info("Server initialization finished :)", false, true);
+
+    // ----------------------------------------------------
 
     // Create "globalServerConfig.thread_pool_size_initial" threads
     // 4 is multiplied to ensure sufficient space is there in the vector to accommodate for
@@ -125,6 +139,9 @@ void main_thread() {
     thread_pool.n = globalServerConfig.thread_pool_size_initial;
 
     for (int i = 0; i < globalServerConfig.thread_pool_size_initial; ++i) {
+        thread_pool.push_back(
+                WorkerThreadInfo(globalServerConfig.clients_per_thread, &globalPoolKVMessage, &globalKVCache)
+        );
         thread_pool.at(i).start_thread();
     }
 
@@ -155,18 +172,18 @@ void main_thread() {
         for (rr_iter = 0; rr_iter < thread_pool.n; ++rr_iter) {
             rr_idx_test = (rr_current_idx + rr_iter) % thread_pool.n;
 
-            pthread_mutex_t *mutex_to_test = &(thread_pool.arr[rr_idx_test].mutex_new_client_fds);
-            pthread_mutex_lock(mutex_to_test);
+            std::mutex &mutex_to_test = thread_pool.arr[rr_idx_test].mutex_new_client_fds;
+            mutex_to_test.lock();
             if (thread_pool.arr[rr_idx_test].client_fds.n < globalServerConfig.clients_per_thread) {
                 // Assign the client connection to the worker thread "thread_pool.arr[rr_idx_test]"
                 thread_pool.at(rr_idx_test).client_fds_new.push_back(client_fd_new);
 
                 // unlock the mutex and exit the loop
-                pthread_mutex_unlock(mutex_to_test);
+                mutex_to_test.unlock();
                 rr_success = 1;
                 break;
             }
-            pthread_mutex_unlock(mutex_to_test);
+            mutex_to_test.unlock();
         }
 
         if (rr_success) {
@@ -189,6 +206,13 @@ void main_thread() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+
+// TODO: write code to handle CTRL+C signal and write all the cache data to Persistent Storage
+
+// Call cacheClear()
+
+// ---------------------------------------------------------------------------------------------------------------------
+
 
 int main() {
     main_thread();
