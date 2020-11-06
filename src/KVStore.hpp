@@ -46,6 +46,10 @@ struct KVStore {
     }
 
     /* ASSUMED: ptr has following values filled: {hash1, hash2, key}
+     *
+     * Returns: true if GET was successful (i.e. Key was either present in the Persistent Storage)
+     *          The "Value" corresponding to "ptr->key" will be stored in "ptr->value"
+     *        : false if "Key" is not present
      * */
     bool read_from_db(struct KVMessage *ptr) {
         // REFER: https://en.cppreference.com/w/cpp/thread/shared_lock/shared_lock
@@ -61,12 +65,12 @@ struct KVStore {
 
         file_fd[file_idx].open(kvStoreFileNames[file_idx], std::ios::in | std::ios::binary);
         if ((not file_fd[file_idx].is_open()) || file_fd[file_idx].fail()) {
-            log_error(std::string("") + "Unable to open Database file: \"" + kvStoreFileNames[file_idx] + "\"");
+            log_error(std::string("") + "Unable to open Database File: \"" + kvStoreFileNames[file_idx] + "\"");
             return false;
         }
 
-        static uint64_t leftIdx, rightIdx, hash1_file, hash2_file;
-        static char key_file[256];
+        uint64_t leftIdx, rightIdx, hash1_file, hash2_file;
+        char key_file[256];
 
         const uint64_t inside_file_idx = (ptr->hash1) % FILE_TABLE_LEN;
         file_fd[file_idx].seekg(get_seek_val(inside_file_idx));
@@ -147,8 +151,8 @@ struct KVStore {
             file_fd[file_idx].open(kvStoreFileNames[file_idx], std::ios::in | std::ios::out | std::ios::binary);
         }
 
-        static uint64_t leftIdx, rightIdx, hash1_file, hash2_file;
-        static char key_file[256];
+        uint64_t leftIdx, rightIdx, hash1_file, hash2_file;
+        char key_file[256];
 
         const uint64_t inside_file_idx = (ptr->hash1) % FILE_TABLE_LEN;
         file_fd[file_idx].seekg(get_seek_val(inside_file_idx));
@@ -171,7 +175,8 @@ struct KVStore {
             return;
         }
 
-        // TODO: SEARCH through the file and replace the the entry if found, else create a new entry at the end of the fileentry if found, else create a new entry at the end of the file
+        // SEARCH through the file and replace the the entry if found,
+        // else create a new entry at the end of the file
         if (hash1_file == ptr->hash1 && hash2_file == ptr->hash2) {
             file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
             if (std::equal(key_file, key_file + 256, ptr->key)) {
@@ -232,10 +237,153 @@ struct KVStore {
         file_fd[file_idx].close();
     }
 
+    /* Returns: true if entry found in Persistent Storage and successfully deleted
+     *        : false if file does not exists or entry not found in Persistent Storage
+     * */
+    bool delete_from_db(struct KVMessage *ptr) {
+        uint64_t file_idx = (ptr->hash1) % HASH_TABLE_LEN;
+
+        // REFER: https://stackoverflow.com/questions/39185420/is-there-a-shared-lock-guard-and-if-not-what-would-it-look-like
+        std::unique_lock write_lock(file_locks[file_idx]);
+
+        if (not file_exists_status.test(file_idx)) {
+            // File does NOT exists
+            return false;
+        }
+
+        file_fd[file_idx].open(kvStoreFileNames[file_idx], std::ios::in | std::ios::out | std::ios::binary);
+        if ((not file_fd[file_idx].is_open()) || file_fd[file_idx].fail()) {
+            log_error(std::string("") + "Unable to open Database File: \"" + kvStoreFileNames[file_idx] + "\"");
+            return false;
+        }
+
+        uint64_t leftIdx, rightIdx, hash1_file, hash2_file, leftIdx_of_key_to_delete, idx_of_key_to_delete;
+        char key_file[256], value_file[256];
+
+        const uint64_t inside_file_idx = (ptr->hash1) % FILE_TABLE_LEN;
+        file_fd[file_idx].seekg(get_seek_val(inside_file_idx));
+        file_fd[file_idx].read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
+        file_fd[file_idx].read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
+        file_fd[file_idx].read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
+        file_fd[file_idx].read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
+
+        if (is_file_entry_empty(leftIdx, rightIdx)) {
+            file_fd[file_idx].close();
+            return false;
+        }
+
+        // First entry matches the "Key"
+        if (hash1_file == ptr->hash1 && hash2_file == ptr->hash2) {
+            file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
+            if (std::equal(key_file, key_file + 256, ptr->key)) {
+                // match found
+                file_fd[file_idx].seekg(get_seek_val(inside_file_idx));
+
+                if(leftIdx == rightIdx) {
+                    // NOTE: this should be true if there is only one entry for this "inside_file_idx"
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                } else if(rightIdx == MAX_UINT64) {
+                    log_error("delete_from_db(...) rightIdx==MAXUINT64 case should have been handled earlier, "
+                              "leftIdx = " + std::to_string(leftIdx) + ", rightIdx = " + std::to_string(rightIdx));
+                    return false;
+                } else {
+                    // NOTE: More than ONE entry found
+                    //       This will work even if there are only two entries
+                    idx_of_key_to_delete = inside_file_idx;
+                    leftIdx_of_key_to_delete = leftIdx;
+
+                    // read RHS of node to delete
+                    file_fd[file_idx].seekg(get_seek_val(rightIdx) + sizeof(uint64_t));
+                    file_fd[file_idx].read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
+                    file_fd[file_idx].read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
+                    file_fd[file_idx].read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
+                    file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
+                    file_fd[file_idx].read(reinterpret_cast<char *>(value_file), 256);
+                    // TODO: verity the below seek statement
+                    // delete the RHS of node to delete
+                    file_fd[file_idx].seekg(-SIZE_OF_ONE_ENTRY, std::ios::cur);
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+
+                    // update leftIdx of RHS of RHS of NodeToDelete
+                    file_fd[file_idx].seekg(get_seek_val(rightIdx));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&idx_of_key_to_delete), sizeof(uint64_t));
+
+                    file_fd[file_idx].seekg(get_seek_val(idx_of_key_to_delete) + sizeof(uint64_t));
+                    // leftIdx remain unchanged for "idx_of_key_to_delete"
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&rightIdx), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&(hash1_file)), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&(hash2_file)), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(key_file), 256);
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(value_file), 256);
+                }
+
+                file_fd[file_idx].close();
+                return true;
+            }
+        }
+
+        uint64_t current_file_idx = rightIdx;
+        while (current_file_idx != inside_file_idx) {
+            file_fd[file_idx].seekg(get_seek_val(current_file_idx));
+            file_fd[file_idx].read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
+            file_fd[file_idx].read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
+            file_fd[file_idx].read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
+            file_fd[file_idx].read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
+
+            if (hash1_file == ptr->hash1 && hash2_file == ptr->hash2) {
+                file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
+                if (std::equal(key_file, key_file + 256, ptr->key)) {
+                    // match found
+
+                    // Works for both:
+                    // a. Last node of the Doubly Linked List is to be deleted
+                    // b. Node between head and tail of Doubly Linked List is to be deleted
+
+                    // Delete the node
+                    file_fd[file_idx].seekg(get_seek_val(current_file_idx));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+
+                    // Update rightIdx of LHS of node to delete
+                    file_fd[file_idx].seekg(get_seek_val(leftIdx) + sizeof(uint64_t));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&rightIdx), sizeof(uint64_t));
+
+                    // Update leftIdx of head node
+                    file_fd[file_idx].seekg(get_seek_val(rightIdx));
+                    file_fd[file_idx].write(reinterpret_cast<const char *>(&leftIdx), sizeof(uint64_t));
+
+                    file_fd[file_idx].close();
+                    return true;
+                }
+            }
+
+            current_file_idx = rightIdx;
+        }
+
+        file_fd[file_idx].close();
+
+        // Entry not found
+        return false;
+    }
 private:
+    static const int_fast32_t SIZE_OF_ONE_ENTRY = (4 * sizeof(uint64_t) + 256 + 256);
     static inline uint64_t get_seek_val(uint64_t idx) {
         // Division by 8 is necessary as file read/write pointer moves by bytes not bits
-        return idx * (4 * sizeof(uint64_t) + 256 + 256);
+        return idx * SIZE_OF_ONE_ENTRY;
     }
 
     // REFER: https://stackoverflow.com/questions/12774207/fastest-way-to-check-if-a-file-exist-using-standard-c-c11-c
@@ -249,5 +397,7 @@ private:
         return true;
     }
 } kvPersistentStore;
+
+const int_fast32_t KVStore::SIZE_OF_ONE_ENTRY;
 
 #endif // PA_4_KEY_VALUE_STORE_KVSTORE_HPP
