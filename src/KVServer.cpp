@@ -1,10 +1,12 @@
 #include <iostream>
 #include <cstdint>
+#include <cstring>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/epoll.h>
 #include <netinet/in.h>
-#include <string.h>
+#include <arpa/inet.h>
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -19,6 +21,7 @@
 
 // ---------------------------------------------------------------------------------------------------------------------
 void *worker_thread(void *);
+int sockfd;
 
 struct ServerConfig {
     // REFER: https://www.geeksforgeeks.org/enumeration-enum-c/
@@ -28,6 +31,7 @@ struct ServerConfig {
     };
 
     int32_t listening_port;
+    int32_t socket_listen_n_limit;
     int32_t thread_pool_size_initial;
     int32_t thread_pool_growth;
     int32_t clients_per_thread;
@@ -43,6 +47,24 @@ struct ServerConfig {
         // TODO: write code to read "CONFIG_FILE" and store the values in "globalServerConfig"
         // Key comes before "=", and Value comes after "="
         // Each Key-Value pair is newline ("\n") separated
+        std::ifstream conFile (configFile);
+        if (conFile.is_open())
+        {
+            std::string line;
+            getline(conFile, line);
+            globalServerConfig.listening_port = std::stoi(line.substr(line.find("=") + 1));
+            getline(conFile, line);
+            globalServerConfig.thread_pool_size_initial = std::stoi(line.substr(line.find("=") + 1));
+            getline(conFile, line);
+            globalServerConfig.thread_pool_growth = std::stoi(line.substr(line.find("=") + 1));
+            getline(conFile, line);
+            globalServerConfig.clients_per_thread = std::stoi(line.substr(line.find("=") + 1));
+            getline(conFile, line);
+            globalServerConfig.cache_size = std::stoi(line.substr(line.find("=") + 1));
+        }
+        else {
+            std::cerr << "Couldn't open config file for reading.\n";
+        }
     }
 };
 
@@ -76,23 +98,59 @@ struct WorkerThreadInfo {
             kv_cache{kvCache} {}
 
     void start_thread() {
-		// TODO: write code to start the worker thread with "WorkerThreadInfo" pointer = ptr
-		pthread_create(&thread_obj, NULL, worker_thread, (void*)this);
+        // Start the worker thread with "WorkerThreadInfo" pointer = ptr
+        pthread_create(&thread_obj, nullptr, worker_thread, reinterpret_cast<void *>(this));
     }
 
 };
 
 struct WorkerThreadInfo WorkerThreadInfo_DEFAULT();
 
-
+#define READ_SIZE 256
+#define MAX_EVENTS 50
 void *worker_thread(void *ptr) {
     auto thread_conf = static_cast<struct WorkerThreadInfo *>(ptr);
 
     int32_t i;
+    /*Creating epoll instance*/
+	int epollfd;
+	epollfd = epoll_create1(0);
+	if(epollfd < -1){
+		std::cerr<< "Failed to create epoll instance...";
+	}
+	/*Creating necessary fd in epoll*/
+	struct epoll_event event;
+	event.events = EPOLLIN;
+	event.data.fd = sockfd;
+	if(epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &event)){
+		std::cerr << "epoll ctl failed...";
+	}
+	int event_count;
+	size_t bytes_read;
+	struct epoll_event events[MAX_EVENTS];
+	char read_buffer [READ_SIZE+1];
 
     while (true) {
         // TODO - Use epoll and serve clients using Cache
+    	event_count = epoll_wait(epollfd, events, MAX_EVENTS, 3000);
 
+		for(int i=0; i<event_count; i++){
+			if (events[i].events & EPOLLERR ||events[i].events & EPOLLHUP || !(events[i].events & EPOLLIN)){
+				std::cerr << "Epoll event error\n";
+				close(events[i].data.fd);
+				break;
+			}
+			if (event_count == 0) {
+				std::cout << "Connection Close for " << events[i].data.fd << "\n";
+				close(events[i].data.fd);
+				break;
+			}
+			bytes_read = read(events[i].data.fd, read_buffer, READ_SIZE);
+			read_buffer[bytes_read] = '\0';
+
+			//Do something with Key-value Cache...
+
+    	}
         // TODO - remove client File Descriptors whose connection has closed/ended
 
         thread_conf->mutex_new_client_fds.lock();
@@ -151,35 +209,38 @@ void main_thread() {
         thread_pool.at(i).start_thread();
     }
 
-    // TODO: Setup a listening socket on a port specified in the config file
+    // REFER: https://stackoverflow.com/questions/16486361/creating-a-basic-c-c-tcp-socket-writer
+    // Setup a listening socket on a port specified in the config file
 
-    int sockfd;
-    struct sockaddr_in servaddr, cli_addr;
-
+    // the most useful file descriptor
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
-    	std::cerr << "Socket creation failed...\n";
-        exit(0);
+        log_error("SOCET creation failed...");
+        log_error("Exiting (status=62)");
+        exit(62);
     }
-    memset(&servaddr, 0, sizeof(servaddr));
-    // assign IP, PORT
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(globalServerConfig.listening_port);
 
-    // Binding newly created socket to given IP and verification
-    if ((bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr))) != 0) {
-    	std::cerr << "Socket bind failed...\n";
-        exit(0);
+    // assign IP, PORT
+    struct sockaddr_in serv_addr{};
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);  // TODO: verify the use of "htonl" here
+    serv_addr.sin_port = htons(globalServerConfig.listening_port);
+
+    // Binding newly created socket to given IP
+    if ((bind(sockfd, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr))) != 0) {
+        log_error("Socket BIND failed...");
+        log_error("Exiting (status=63)");
+        exit(63);
     }
-    // Now server is ready to listen and verification
-    if ((listen(sockfd, 1024)) != 0) {
-    	std::cerr << "Listen failed...\n";
-        exit(0);
+    // Now server is ready to listen
+    if ((listen(sockfd, globalServerConfig.socket_listen_n_limit)) != 0) {
+        // MAYBE "globalServerConfig.listening_port" is already in use
+        log_error("Socket LISTEN failed...");
+        log_error("Exiting (status=64)");
+        exit(64);
     }
-    // TODO: if "globalServerConfig.listening_port" is already in use, then print the error message and exit
-    // REFER: https://stackoverflow.com/questions/16486361/creating-a-basic-c-c-tcp-socket-writer
 
     // rr_current_idx - the last "WorkerThreadInfo" index which was used to add the last client request received
     // rr_idx_test - used to store the index of the "WorkerThreadInfo" which is to be tested for assigning the new client
@@ -187,8 +248,9 @@ void main_thread() {
     int32_t rr_current_idx = -1, rr_idx_test, rr_iter;
     int rr_success;
 
+    struct sockaddr_in client_addr{};
+    unsigned int client_len;
     int client_fd_new;
-    unsigned int clilen;
 
     log_success("Server initialization complete :)");
 
@@ -197,11 +259,17 @@ void main_thread() {
         // Perform accept() on the listening socket and pass each established connection
         // to one of the "thread_pool.n" threads using Round Robin fashion
         //client_fd_new = 1;  // TODO: replace "1" with the code to get the client connection File Descriptor
-    	clilen = sizeof(cli_addr);
-    	client_fd_new = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
-    	if(client_fd_new < 0){
-    		std::cerr << "Failed to accept client...";
-    	}
+        client_len = sizeof(client_addr);
+        client_fd_new = accept(sockfd, reinterpret_cast<struct sockaddr *>(&client_addr), &client_len);
+        if (client_fd_new < 0) {
+            log_error("Socket failed to ACCEPT client...wait for next client");
+            continue;
+        }
+
+        // REFER: https://stackoverflow.com/questions/4282369/determining-the-ip-address-of-a-connected-client-on-the-server
+        log_info(std::string("---> New Client IP = ") + inet_ntoa(client_addr.sin_addr)
+                 + ", Port = " + std::to_string(ntohs(client_addr.sin_port)));
+
         // Assign the client to one of the threads in the "thread_pool"
         rr_current_idx = (rr_current_idx + 1) % thread_pool.n;
         rr_success = 0;
