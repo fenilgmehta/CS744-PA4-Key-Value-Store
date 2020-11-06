@@ -37,17 +37,17 @@ void start_sending_requests(const MyVector<KVMessage> &dataset, const char *serv
 
         // No other case is possible because they are handled while reading the dataset file
         switch (i.status_code) {
-            case 1:
+            case KVMessage::EnumGET:
                 connection.GET(i);
                 if (not equal(i.value, i.value + 256, connection.resultValue)) {
                     log_error(
                             "*** Server response was not consistent with what was expected if this is the only client updating the server, or if all clients are making request for different keys ***");
                 }
                 break;
-            case 2:
+            case KVMessage::EnumPUT:
                 connection.PUT(i);
                 break;
-            case 3:
+            case KVMessage::EnumDEL:
                 connection.DELETE(i);
                 break;
         }
@@ -88,7 +88,7 @@ MyVector<KVMessage> load_client_request_dataset(char *filename) {
     for (int i = 0; i < requestCount; ++i) {
         // Request Codes: 1=GET, 2=PUT, 3=DELETE
         fileReader >> request_type;
-        if (not(1 <= request_type && request_type <= 3)) {
+        if (not KVMessage::is_request_code_valid(request_type)) {
             log_error("Invalid value of Request Code = " + to_string(request_type));
             fileReader.close();
             exit(3);
@@ -96,7 +96,8 @@ MyVector<KVMessage> load_client_request_dataset(char *filename) {
 
         temp.status_code = request_type;
         fileReader >> temp.key;
-        if (request_type == 2) fileReader >> temp.value;  // "Value" is only required for PUT requests
+        if (KVMessage::is_request_code_PUT(request_type))
+            fileReader >> temp.value;  // "Value" is only required for PUT requests
         dataset.at(i) = temp;
     }
 
@@ -106,7 +107,7 @@ MyVector<KVMessage> load_client_request_dataset(char *filename) {
 
 int main(int argc, char *argv[]) {
     // REFER: https://www.geeksforgeeks.org/command-line-arguments-in-c-cpp/
-    if (argc == 4) {
+    if (argc >= 2) {
         log_info("Loading client requests dataset...", true);
         MyVector<KVMessage> dataset = load_client_request_dataset(argv[1]);
         log_info("Loading successfully complete\n");
@@ -119,7 +120,8 @@ int main(int argc, char *argv[]) {
 #endif
 
         // TODO: add technique to measure execution time
-        start_sending_requests(dataset, argv[2], argv[3]);
+        // REFER: https://www.geeksforgeeks.org/measure-execution-time-function-cpp/
+        start_sending_requests(dataset, (argc >=3) ? argv[2] : "127.0.0.1", (argc >= 4) ? argv[3] : "12345");
         return 0;
     }
 

@@ -88,7 +88,7 @@ struct ClientServerConnection {
 
     void GET(const struct KVMessage &message) {
         // 1 represents GET request
-        ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>("1"), 1))
+        ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(&(KVMessage::StatusCodeValueGET)), 1))
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(message.key), 256))
 
         ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultStatusCode), 1))
@@ -98,12 +98,12 @@ struct ClientServerConnection {
 
     void PUT(const struct KVMessage &message) {
         // 2 represents PUT request
-        ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>("2"), 1))
+        ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(&(KVMessage::StatusCodeValuePUT)), 1))
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(message.key), 256))
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(message.value), 256))
 
         ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultStatusCode), 1))
-        if (resultStatusCode == 240) {
+        if (KVMessage::is_request_result_ERROR(resultStatusCode)) {
             ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultValue), 256))
             std::copy(std::begin(REQUEST_FAILURE_MSG), std::end(REQUEST_FAILURE_MSG), resultValue);
         }
@@ -112,11 +112,11 @@ struct ClientServerConnection {
 
     void DELETE(const struct KVMessage &message) {
         // 3 represents DELETE request
-        ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>("3"), 1))
+        ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(&(KVMessage::StatusCodeValueDEL)), 1))
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(message.key), 256))
 
         ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultStatusCode), 1))
-        if (resultStatusCode == 240) {
+        if (KVMessage::is_request_result_ERROR(resultStatusCode)) {
             ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultValue), 256))
             std::copy(std::begin(REQUEST_FAILURE_MSG), std::end(REQUEST_FAILURE_MSG), resultValue);
         }
@@ -124,11 +124,11 @@ struct ClientServerConnection {
     }
 
     void print_result_returned(const char *operationName) {
-        if (resultStatusCode == 200) {
+        if (KVMessage::is_request_result_SUCCESS(resultStatusCode)) {
             log_info(std::string(operationName) + ": was successful");
-        } else if (resultStatusCode == 240) {
-            log_warning(std::string(operationName) + ": resultStatusCode = 240");
-            log_warning(std::string("    ") + "--> Returned Messaged says: \"" + resultValue + "\"");
+        } else if (KVMessage::is_request_result_ERROR(resultStatusCode)) {
+            log_warning(std::string(operationName) + ": resultStatusCode = " + std::to_string((int) resultStatusCode));
+            log_warning(std::string("") + "    --> Returned Messaged says: \"" + resultValue + "\"");
         } else {
             log_error("INVALID resultStatusCode = " + std::to_string((int) resultStatusCode), true, true);
         }

@@ -29,25 +29,28 @@ enum Code {
 
     /* Yellow message */
     template <typename T>
-    void log_warning(const T& msg, bool prependNewLine = false){
-        if(prependNewLine) std::cerr << "\n";
-        std::cerr << color(FG_YELLOW) << "ERROR: " << color(FG_DEFAULT) << msg << std::endl;
+    void log_warning(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false){
+        if(prependNewLine) std::cerr << '\n';
+        std::cerr << color(FG_YELLOW) << "ERROR: " << color(FG_DEFAULT) << msg << '\n';
+        if(appendExtraNewLine) std::cerr << '\n';
         std::cerr.flush();
     }
 
     /* Blue message */
     template <typename T>
-    void log_info(const T& msg, bool prependNewLine = false){
-        if(prependNewLine) std::cout << "\n";
-        std::cout << color(FG_BLUE) << "INFO: " << color(FG_DEFAULT) << msg << std::endl;
+    void log_info(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false){
+        if(prependNewLine) std::cout << '\n';
+        std::cout << color(FG_BLUE) << "INFO: " << color(FG_DEFAULT) << msg << '\n';
+        if(appendExtraNewLine) std::cout << '\n';
         std::cout.flush();
     }
 
     /* Green message */
     template <typename T>
-    void log_success(const T& msg, bool prependNewLine = false){
-        if(prependNewLine) std::cout << "\n";
-        std::cout << color(FG_GREEN) << "ERROR: " << color(FG_DEFAULT) << msg << std::endl;
+    void log_success(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false){
+        if(prependNewLine) std::cout << '\n';
+        std::cout << color(FG_GREEN) << "ERROR: " << color(FG_DEFAULT) << msg << '\n';
+        if(appendExtraNewLine) std::cout << '\n';
         std::cout.flush();
     }
 
@@ -61,9 +64,9 @@ enum Code {
 /* Red message */
 template <typename T>
 void log_error(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false){
-    if(prependNewLine) std::cerr << "\n";
+    if(prependNewLine) std::cerr << '\n';
     std::cerr << color(FG_RED) << "ERROR: " << color(FG_DEFAULT) << msg << std::endl;
-    if(appendExtraNewLine) std::cerr << "\n";
+    if(appendExtraNewLine) std::cerr << '\n';
     std::cerr.flush();
 }
 

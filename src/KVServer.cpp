@@ -214,7 +214,7 @@ void main_thread() {
 
     // the most useful file descriptor
     // socket create and verification
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
         log_error("SOCET creation failed...");
         log_error("Exiting (status=62)");
