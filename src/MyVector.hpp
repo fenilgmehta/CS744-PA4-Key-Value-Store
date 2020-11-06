@@ -27,6 +27,43 @@ struct MyVector {
         this->arr = static_cast<T *>(malloc(n_capacity * sizeof(T)));
     }
 
+    /* Destructor */
+    ~MyVector() {
+        free(this->arr);
+    }
+
+    // REFER: https://stackoverflow.com/questions/11313517/malloc-and-constructors-in-c?lq=1
+    template <class... Args>
+    inline void call_constructor(const size_t idx, Args&&... args) {
+        new(arr + idx) T(args...);
+    }
+
+    template <class... Args>
+    void call_constructor(size_t first_idx, const size_t last_idx, Args&&... args) {
+        for(; first_idx != last_idx; ++first_idx) {
+            new(arr + first_idx) T(args...);
+        }
+    }
+
+    template <class... Args>
+    void call_constructor_all(Args&&... args) {
+        call_constructor(0, n, args...);
+    }
+
+    inline void call_destructor(const size_t idx) {
+        (arr + idx)->~T();
+    }
+
+    void call_destructor(size_t first_idx, const size_t last_idx) {
+        for(; first_idx != last_idx; ++first_idx) {
+            (arr + first_idx)->~T();
+        }
+    }
+
+    void call_destructor_all() {
+        call_destructor(0, n);
+    }
+
     inline T &at(const size_t idx) {
         return this->arr[idx];
     }
@@ -39,6 +76,8 @@ struct MyVector {
     inline const T &at(const size_t idx) const {
         return this->arr[idx];
     }
+
+    // TODO: check who all are calling push_back and see if object are properly constructed or not ?
 
     /* RETURNS: true if push_back was successful */
     bool push_back() {
@@ -72,7 +111,7 @@ struct MyVector {
 
         // REFER: https://www.geeksforgeeks.org/possible-call-constructor-destructor-explicitly/
         // explicitly call the destructor
-        this->arr[this->n].~T();
+        call_destructor(this->n);
         return this->arr[this->n];
     }
 
@@ -85,13 +124,17 @@ struct MyVector {
         else this->n -= popCount;
 
         // explicitly call the destructor for the last element popped
-        this->arr[this->n].~T();
+        call_destructor(this->n, this->n + popCount);
         return this->arr[this->n];
     }
 
     /* Removes all elements from the vector */
     inline void clear() {
         this->n = 0;
+    }
+
+    void fill(const T& val) {
+        for(size_t i = 0; i < n; ++i) arr[i] = val;
     }
 
     /* RETURNS: true if resize was successful */
@@ -104,6 +147,10 @@ struct MyVector {
         return arrNew != NULL;
     }
 
+    inline void expand_to_full_capacity() {
+        this->n = this->nMax;
+    }
+
     [[nodiscard]] inline size_t size() const {
         return n;
     }
@@ -112,10 +159,6 @@ struct MyVector {
         return this-n == 0;
     }
 
-    /* Destructor */
-    ~MyVector() {
-        free(this->arr);
-    }
 };
 
 
