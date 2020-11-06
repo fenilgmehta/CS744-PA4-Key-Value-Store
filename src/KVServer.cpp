@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/epoll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <csignal>
@@ -22,6 +23,7 @@
 
 // ---------------------------------------------------------------------------------------------------------------------
 void *worker_thread(void *);
+int sockfd;
 
 struct ServerConfig {
     // REFER: https://www.geeksforgeeks.org/enumeration-enum-c/
@@ -118,16 +120,51 @@ struct WorkerThreadInfo {
 
 struct WorkerThreadInfo WorkerThreadInfo_DEFAULT();
 
-
+#define READ_SIZE 256
+#define MAX_EVENTS 50
 void *worker_thread(void *ptr) {
     auto thread_conf = static_cast<struct WorkerThreadInfo *>(ptr);
 
     int32_t i;
+    /*Creating epoll instance*/
+	int epollfd;
+	epollfd = epoll_create1(0);
+	if(epollfd < -1){
+		std::cerr<< "Failed to create epoll instance...";
+	}
+	/*Creating necessary fd in epoll*/
+	struct epoll_event event;
+	event.events = EPOLLIN;
+	event.data.fd = sockfd;
+	if(epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &event)){
+		std::cerr << "epoll ctl failed...";
+	}
+	int event_count;
+	size_t bytes_read;
+	struct epoll_event events[MAX_EVENTS];
+	char read_buffer [READ_SIZE+1];
 
     while (true) {
         // TODO - Use epoll and serve clients using Cache
-        
+    	event_count = epoll_wait(epollfd, events, MAX_EVENTS, 3000);
 
+		for(int i=0; i<event_count; i++){
+			if (events[i].events & EPOLLERR ||events[i].events & EPOLLHUP || !(events[i].events & EPOLLIN)){
+				std::cerr << "Epoll event error\n";
+				close(events[i].data.fd);
+				break;
+			}
+			if (event_count == 0) {
+				std::cout << "Connection Close for " << events[i].data.fd << "\n";
+				close(events[i].data.fd);
+				break;
+			}
+			bytes_read = read(events[i].data.fd, read_buffer, READ_SIZE);
+			read_buffer[bytes_read] = '\0';
+
+			//Do something with Key-value Cache...
+
+    	}
         // TODO - remove client File Descriptors whose connection has closed/ended
 
         thread_conf->mutex_new_client_fds.lock();
