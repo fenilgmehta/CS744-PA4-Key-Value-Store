@@ -2,10 +2,12 @@
 #include <cstdint>
 #include <cstring>
 #include <pthread.h>
+#include <fstream>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <csignal>
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -38,13 +40,43 @@ struct ServerConfig {
     // Of NO use as only one Cache Replacement Policy will be implemented for the Assignment
     enum CacheReplacementPolicyType cache_replacement_policy;
 
-    ServerConfig() = default;
+    ServerConfig() {
+        listening_port = 12345;
+        socket_listen_n_limit = 1024;
+        thread_pool_size_initial = 2;
+        thread_pool_growth = 2;
+        clients_per_thread = 5;
+        cache_size = 5;
+        cache_replacement_policy = CacheTypeLRU;
+    }
 
     /* Read config file "KVServer.conf" and store the values in "globalServerConfig" */
     void read_server_config(const char *configFile = "KVServer.conf") {
-        // TODO: write code to read "CONFIG_FILE" and store the values in "globalServerConfig"
-        // Key comes before "=", and Value comes after "="
+        // Read "CONFIG_FILE" and store the values in "globalServerConfig"
+        // Key comes before " ", and Value comes after " "
         // Each Key-Value pair is newline ("\n") separated
+        std::fstream conf_file;
+        conf_file.open(configFile, std::ios::in);
+        std::string key;
+        int32_t val;
+        // LISTENING_PORT 12345
+        // SOCKET_LISTEN_N_LIMIT 1024
+        // THREAD_POOL_SIZE_INITIAL 2
+        // THREAD_POOL_GROWTH 2
+        // CLIENTS_PER_THREAD 5
+        // CACHE_SIZE 5
+        while ((not conf_file.eof()) && conf_file.is_open()) {
+            conf_file >> key >> val;
+            if (key == "LISTENING_PORT") listening_port = val;
+            else if (key == "SOCKET_LISTEN_N_LIMIT") socket_listen_n_limit = val;
+            else if (key == "THREAD_POOL_SIZE_INITIAL") thread_pool_size_initial = val;
+            else if (key == "THREAD_POOL_GROWTH") thread_pool_growth = val;
+            else if (key == "CLIENTS_PER_THREAD") clients_per_thread = val;
+            else if (key == "CACHE_SIZE") cache_size = val;
+            else log_warning("Invalid server config parameter = \"" + key + "\"");
+        }
+
+        conf_file.close();
     }
 };
 
@@ -94,6 +126,7 @@ void *worker_thread(void *ptr) {
 
     while (true) {
         // TODO - Use epoll and serve clients using Cache
+        
 
         // TODO - remove client File Descriptors whose connection has closed/ended
 
@@ -115,6 +148,9 @@ void *worker_thread(void *ptr) {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+struct MyVector<WorkerThreadInfo> *global_thread_pool;
+struct KVCache *globalKVCache;
+
 void main_thread() {
     log_info("+ Server initialization started...");
 
@@ -132,7 +168,8 @@ void main_thread() {
     kvPersistentStore.init_kvstore();  // This is present in KVStore.hpp
 
     log_info("    [4/4] Initializing Cache");
-    KVCache globalKVCache(globalServerConfig.cache_size);
+    KVCache kvCache(globalServerConfig.cache_size);
+    globalKVCache = &kvCache;
 
     log_info("Server initialization finished :)", false, true);
 
@@ -142,13 +179,14 @@ void main_thread() {
     // 4 is multiplied to ensure sufficient space is there in the vector to accommodate for
     // future increase in the number of threads in the "thread_pool"
     struct MyVector<WorkerThreadInfo> thread_pool(4 * globalServerConfig.thread_pool_size_initial);
+    global_thread_pool = &thread_pool;
 
     // this will give better performance as compared to calling "push_back_default" multiple times
     thread_pool.n = globalServerConfig.thread_pool_size_initial;
 
     for (int i = 0; i < globalServerConfig.thread_pool_size_initial; ++i) {
         thread_pool.push_back(
-                WorkerThreadInfo(globalServerConfig.clients_per_thread, &globalPoolKVMessage, &globalKVCache)
+                WorkerThreadInfo(globalServerConfig.clients_per_thread, &globalPoolKVMessage, &kvCache)
         );
         thread_pool.at(i).start_thread();
     }
@@ -199,10 +237,8 @@ void main_thread() {
     log_success("Server initialization complete :)");
 
     while (true) {
-        // TODO
         // Perform accept() on the listening socket and pass each established connection
         // to one of the "thread_pool.n" threads using Round Robin fashion
-        //client_fd_new = 1;  // TODO: replace "1" with the code to get the client connection File Descriptor
         client_len = sizeof(client_addr);
         client_fd_new = accept(sockfd, reinterpret_cast<struct sockaddr *>(&client_addr), &client_len);
         if (client_fd_new < 0) {
@@ -260,10 +296,24 @@ void main_thread() {
 
 // Call cacheClear()
 
+void signal_callback_handler(int signum) {
+    log_error("CTRL+C pressed. Closing the server...", true);
+    for(int i = 0; i < global_thread_pool->n; ++i) {
+        // acquire mutex for all threads so that they stop at that point
+        global_thread_pool->at(i).mutex_new_client_fds.lock();
+    }
+    globalKVCache->cache_clean();
+    exit(0);
+    log_error("Server cleanup complete :)", false, true);
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 
 
 int main() {
+    // REFER: https://www.tutorialspoint.com/how-do-i-catch-a-ctrlplusc-event-in-cplusplus
+    signal(SIGINT, signal_callback_handler);
+
     main_thread();
     return 0;
 }
