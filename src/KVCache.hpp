@@ -87,8 +87,20 @@ struct CacheNode {
         dirty_bit = dirtyBit;
     }
 
+    [[nodiscard]] inline bool is_cache_node_dirty() const {
+        return dirty_bit == EnumDirtyBit::DirtyBit_DIRTY;
+    }
+
     [[nodiscard]] inline bool is_cache_node_valid() const {
         return dirty_bit == EnumDirtyBit::DirtyBit_ALLGOOD || dirty_bit == EnumDirtyBit::DirtyBit_DIRTY;
+    }
+
+    [[nodiscard]] inline bool is_cache_node_deleted() const {
+        return dirty_bit == EnumDirtyBit::DirtyBit_TODELETE;
+    }
+
+    [[nodiscard]] inline bool is_cache_node_evicted() const {
+        return dirty_bit == EnumDirtyBit::DirtyBit_INVALID;
     }
 
     // TODO: I think this should be removed because Memory Pool is present with the KVServer.cpp
@@ -155,53 +167,50 @@ struct KVCache {
      *              - The "Value" corresponding to "ptr->key" will be stored in "ptr->value"
      *        : false if "Key" is not present
      * */
-    bool cache_GET(struct KVMessage *ptr) {
-        if (is_empty()) {
-            return false;
-        }
+
+    CacheNode *cache_GET_ptr(struct KVMessage *ptr) {
         ptr->calculate_key_hash();
 
         uint64_t hashTableIdx = (ptr->hash1) % HASH_TABLE_LEN;
-
-        // Search through the cache
-        // a. entry found - return the value in ptr->value
-        // b. entry not found - search Persistent storage and do eviction if the cache is full
         std::shared_lock reader_lock(hashTable.at(hashTableIdx).rw_lock);
 
-        struct CacheNode *cacheNodeIter = hashTable.at(hashTableIdx).head;
+        if (not is_empty()) {
+            // Search through the cache
+            // a. entry found - return the value in ptr->value
+            // b. entry not found - search Persistent storage and do eviction if the cache is full
 
-        while (cacheNodeIter != nullptr) {
-            if (not(
-                    (cacheNodeIter->message.hash1 == ptr->hash1)
-                    && (cacheNodeIter->message.hash2 == ptr->hash2)
-                    && std::equal(ptr->key, ptr->key + 256, cacheNodeIter->message.key)
-            )) {
-                cacheNodeIter = cacheNodeIter->l1_right;
-                continue;
+            struct CacheNode *cacheNodeIter = hashTable.at(hashTableIdx).head;
+
+            while (cacheNodeIter != nullptr) {
+                if (not entry_equals(&(cacheNodeIter->message), ptr)) {
+                    cacheNodeIter = cacheNodeIter->l1_right;
+                    continue;
+                }
+
+                // match found :)
+                std::copy(cacheNodeIter->message.value, cacheNodeIter->message.value + 256, ptr->value);
+
+                // Update the LRU list
+                std::unique_lock write_lock(lruEvictionTable.at(cacheNodeIter->lru_idx).rw_lock);
+
+                // IMPORTANT: this is same as the one in "cache_PUT"
+                // No point of performing any work if cacheNodeIter is already the first node in the LRU Queue
+                if (cacheNodeIter->l2_prev != nullptr) {
+                    cacheNodeIter->l2_prev->l2_next = cacheNodeIter->l2_next;
+                    if (cacheNodeIter->l2_next == nullptr)  // i.e. this is last node in LRU Queue
+                        lruEvictionTable.at(cacheNodeIter->lru_idx).tail = cacheNodeIter->l2_prev;
+                    else
+                        cacheNodeIter->l2_next->l2_prev = cacheNodeIter->l2_prev;
+
+                    cacheNodeIter->l2_prev = nullptr;
+                    cacheNodeIter->l2_next = lruEvictionTable.at(cacheNodeIter->lru_idx).head;
+                    lruEvictionTable.at(cacheNodeIter->lru_idx).head = cacheNodeIter;
+                }
+
+                return cacheNodeIter;
             }
-
-            // match found :)
-            std::copy(cacheNodeIter->message.value, cacheNodeIter->message.value + 256, ptr->value);
-
-            // Update the LRU list
-            std::unique_lock write_lock(lruEvictionTable.at(cacheNodeIter->lru_idx).rw_lock);
-
-            // IMPORTANT: this is same as the one in "cache_PUT"
-            // No point of performing any work if cacheNodeIter is already the first node in the LRU Queue
-            if (cacheNodeIter->l2_prev != nullptr) {
-                cacheNodeIter->l2_prev->l2_next = cacheNodeIter->l2_next;
-                if (cacheNodeIter->l2_next == nullptr)  // i.e. this is last node in LRU Queue
-                    lruEvictionTable.at(cacheNodeIter->lru_idx).tail = cacheNodeIter->l2_prev;
-                else
-                    cacheNodeIter->l2_next->l2_prev = cacheNodeIter->l2_prev;
-
-                cacheNodeIter->l2_prev = nullptr;
-                cacheNodeIter->l2_next = lruEvictionTable.at(cacheNodeIter->lru_idx).head;
-                lruEvictionTable.at(cacheNodeIter->lru_idx).head = cacheNodeIter;
-            }
-
-            return true;
         }
+
 
         if (kvPersistentStore.read_from_db(ptr)) {
             // Get the Key-Value pair in Cache
@@ -232,10 +241,15 @@ struct KVCache {
             if (lruEvictionTable.at(lru_insert_idx).tail == nullptr)
                 lruEvictionTable.at(lru_insert_idx).tail = new_cacheNode;
 
-            return true;
+            return new_cacheNode;
         }
 
-        return false;  // "Key" neither found in cache nor in persistent storage
+        return nullptr;  // "Key" neither found in cache nor in persistent storage
+    }
+
+    bool cache_GET(struct KVMessage *ptr) {
+        auto res = cache_GET_ptr(ptr);
+        return res != nullptr;
     }
 
     /* ASSUMED: ptr->key and ptr->value are correctly filled in ptr
@@ -254,11 +268,7 @@ struct KVCache {
         struct CacheNode *cacheNodeIter = hashTable.at(hashTableIdx).head;
 
         while (cacheNodeIter != nullptr) {
-            if (not(
-                    (cacheNodeIter->message.hash1 == ptr->hash1)
-                    && (cacheNodeIter->message.hash2 == ptr->hash2)
-                    && std::equal(ptr->key, ptr->key + 256, cacheNodeIter->message.key)
-            )) {
+            if (not entry_equals(&(cacheNodeIter->message), ptr)) {
                 cacheNodeIter = cacheNodeIter->l1_right;
                 continue;
             }
@@ -332,21 +342,100 @@ struct KVCache {
     /* ASSUMED: ptr->key is correctly filled in ptr
      * IMPORTANT: will calculate hash1 and hash2 here
      * */
-    struct KVMessage *cache_DELETE(struct KVMessage *ptr) {
+    bool cache_DELETE(struct KVMessage *ptr) {
         ptr->calculate_key_hash();
 
-        // TODO
+        uint64_t hashTableIdx = (ptr->hash1) % HASH_TABLE_LEN;
+
+        // Search through the cache
+        // a. entry found - then update the value in ptr->value and update the dirty bit
+        // b. entry not found - do eviction if the cache is full and set the dirty bit
+        std::shared_lock reader_lock(hashTable.at(hashTableIdx).rw_lock);
+
+        struct CacheNode *cacheNodeIter = hashTable.at(hashTableIdx).head;
+
+        while (cacheNodeIter != nullptr) {
+            if (not entry_equals(&(cacheNodeIter->message), ptr)) {
+                cacheNodeIter = cacheNodeIter->l1_right;
+                continue;
+            }
+
+            if (cacheNodeIter->is_cache_node_deleted()) {
+                // The Key has been deleted
+                return false;
+            } else if (cacheNodeIter->is_cache_node_evicted()) {
+                // Bring it back in cache
+                CacheNode *new_cacheNodeIter = cache_GET_ptr(ptr);
+                if (new_cacheNodeIter == nullptr)
+                    return false;  // entry has been deleted from the storage as well
+
+                reader_lock.unlock();
+                std::unique_lock writer_lock1(hashTable.at(hashTableIdx).rw_lock);
+                new_cacheNodeIter->dirty_bit = CacheNode::EnumDirtyBit::DirtyBit_TODELETE;
+            } else {
+                reader_lock.unlock();
+                std::unique_lock writer_lock1(hashTable.at(hashTableIdx).rw_lock);
+                std::unique_lock writer_lock2(lruEvictionTable.at(cacheNodeIter->lru_idx).rw_lock);
+                cacheNodeIter->dirty_bit = CacheNode::EnumDirtyBit::DirtyBit_TODELETE;
+                move_to_head(&lruEvictionTable.at(cacheNodeIter->lru_idx), cacheNodeIter);
+            }
+            return true;
+        }
+
+        // Bring it back in cache
+        CacheNode *new_cacheNodeIter = cache_GET_ptr(ptr);
+        if (new_cacheNodeIter == nullptr)
+            return false;  // entry has been deleted from the storage as well
+
+        reader_lock.unlock();
+        std::unique_lock writer_lock1(hashTable.at(hashTableIdx).rw_lock);
+        new_cacheNodeIter->dirty_bit = CacheNode::EnumDirtyBit::DirtyBit_TODELETE;
+        return true;
     }
 
     void cache_eviction() {
         // TODO
         // Write to Persistent storage if dirty bit of a CacheNode is true
+        for (int i = 0; i < 10; ++i) {
+            uint64_t eqIdx = get_next_eviction_queue_idx();
+            if (lruEvictionTable.at(eqIdx).head == nullptr) continue;
 
+            uint64_t hqIdx = lruEvictionTable.at(eqIdx).tail->message.hash1 % HASH_TABLE_LEN;
+            std::unique_lock writer_lock1(hashTable.at(hqIdx).rw_lock);
+            std::unique_lock writer_lock2(lruEvictionTable.at(eqIdx).rw_lock);
+
+            CacheNode *ptrToRemove = lruEvictionTable.at(eqIdx).tail;
+            if (ptrToRemove->is_cache_node_evicted()) {
+                writer_lock1.unlock();
+                writer_lock2.unlock();
+                continue;
+            }
+
+            remove_from_dll(&hashTable.at(hqIdx), ptrToRemove);
+            remove_from_dll(&lruEvictionTable.at(eqIdx), ptrToRemove);
+
+            if (ptrToRemove->is_cache_node_deleted()) {
+                kvPersistentStore.delete_from_db(&ptrToRemove->message);
+                cacheNodeMemoryPool.release_instance(ptrToRemove);
+            } else if (ptrToRemove->is_cache_node_dirty()) {
+                kvPersistentStore.write_to_db(&ptrToRemove->message);
+                cacheNodeMemoryPool.release_instance(ptrToRemove);
+            } else {
+                // the updated value is already present in the Persistent Storage
+                cacheNodeMemoryPool.release_instance(ptrToRemove);
+            }
+
+            writer_lock1.unlock();
+            writer_lock2.unlock();
+        }
     }
 
     /* Write all cached data to Persistent Storage */
     void cache_clean() {
         // TODO: Mostly will just have to call "cache_eviction" for all cache entries
+        while (not is_empty()) {
+            cache_eviction();
+        }
     }
 
 private:
@@ -427,6 +516,46 @@ private:
         // return lruEvictionTable.at(id);
     }
 
+    static void move_to_head(CacheNodeQueuePtr *ptrQueue, CacheNode *ptr) {
+        if (ptrQueue->head == ptr) {
+            return;  // ptr is already the ptrQueue->head
+        }
+        remove_from_dll(ptrQueue, ptr);
+        insert_to_head(ptrQueue, ptr);
+    }
+
+    /* ASSUMED: ptr will not be the first node in the Doubly Linked List (NOT Circular) */
+    static void remove_from_dll(CacheNodeQueuePtr *ptrQueue, CacheNode *ptr) {
+        // remove the node from Doubly Linked List - NOT Circular
+        ptr->l2_prev->l2_next = ptr->l2_next;
+
+        if (ptr->l2_next == nullptr) {
+            ptrQueue->tail = ptr->l2_prev;
+        } else {
+            // if ptr is not the last node
+            ptr->l2_next->l2_prev = ptr->l2_prev;
+        }
+    }
+
+    static void insert_to_head(CacheNodeQueuePtr *ptrQueue, CacheNode *ptr) {
+        ptr->l2_next = ptrQueue->head;
+        ptr->l2_prev = nullptr;
+
+        if (ptrQueue->head == nullptr) {
+            // list is empty
+            ptrQueue->tail = ptr;
+        } else {
+            // list is NON empty
+            ptrQueue->head->l2_prev = ptr;
+        }
+        ptrQueue->head = ptr;
+    }
+
+    static bool entry_equals(KVMessage *a, KVMessage *b) {
+        return (a->hash1 == b->hash1)
+               && (a->hash2 == b->hash2)
+               && (std::equal(a->key, a->key + 256, b->key));
+    }
 
 };
 
