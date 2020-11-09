@@ -16,31 +16,65 @@
 ### Compilation and Execution
 - Compiling Server and Client
   ```sh
-  make all
+  make all  # for performance testing
+  make debug  # for debugging and checking what the client and server are doing using logging (with "std::cout" and "std::cerr")
   ```
 
 - Executing Server
   ```sh
-  # Can edit the server configuration in KVServer.conf
+  # Can edit the server configuration in "KVServer.conf"
+  #  - Key comes before space " ", and Value comes after space " "
+  #  - Each Key-Value pair comes on a newline ("\n")
+  
+  # For performance testing
   ./KVServer
+  
+  # For viewing how the server is receiving the requests and how they are being served
+  ./KVServer_db
   ```
 
 - Executing Client
   ```sh
-  # ./KVClient client_request_002.txt SERVER_IP SERVER_PORT
-  ./KVClient client_request_002.txt 127.0.0.1 12345
+  # ./KVClient client_request_001.txt SERVER_IP SERVER_PORT
+  # ./KVClient_db client_request_001.txt SERVER_IP SERVER_PORT
+  
+  # For performance testing
+  ./KVClient client_request_001.txt 127.0.0.1 12345
+  
+  # For viewing how the client loads the "client_request_[0-9]{3}.txt"
+  ./KVClient_db client_request_001.txt 127.0.0.1 12345
+  ```
+  
+- Automatic Testing: these Python 3 scripts can be used to generate testing dataset and be passed to KVClient.cpp for sending the requests to the KVServer.cpp
+  ```sh
+  request_count=5000
+  file_name="client_request_006.txt"
+  
+  file_name_without_extension="${file_name%.*}"  # REFER: https://stackoverflow.com/questions/965053/extract-filename-and-extension-in-bash
+  file_sol="${file_name_without_extension}_sol.txt"
+  server_port_number=$( cat KVServer.conf | grep LISTENING_PORT | awk '{print $2}' )
+  
+  python PythonClientRequestsGenerator.py <<< "${request_count}" > ${file_name} 
+  python PythonSolutionsGenerator.py < ${file_name} > "${file_sol}" 
+  
+  # NOTE: use "make all" and "./KVClient ....." for performance testing
+  make debug
+  ./KVClient_db ${file_name} 127.0.0.1 ${server_port_number} ${file_sol} 
   ```
 
 ### Implementation Details
 - Source Code structure
-    - **`KVServer.c`** - This is the server program which will accept client connections and serve them
-    - **`KVClient.c`** - Client program which will make connection with server and then send GET, PUT, DELETE requests to the server process using `KVClientLibrary.hpp` provided API
+    - **`KVServer.cpp`** - This is the server program which will accept client connections and serve them
+    - **`KVClient.cpp`** - Client program which will make connection with server and then send GET, PUT, DELETE requests to the server process using `KVClientLibrary.hpp` provided API
     - **`KVCache.hpp`** - In Memory Cache which works in collaboration with `KVStore.hpp` to serve`KVServer.c`
     - **`KVStore.hpp`** - Interface to hd_GET, hd_SET and hd_DELETE key-value pair to and from the Storage (Hard Disk - SSD *or* HDD *or* any other type)
         - `hd` in the above interfaces refer to hard disk
     - **`KVClientLibrary.hpp`** - API provided by the server for the Client. This is a library, which will encode and decode your request and response messages.
         - For example, at the client side this library will encode your request message to the decided message format, and then send it out to the server process. Similarly, it will decode the response received from the server, and then hand out the decoded response to the KVClient module. 
     - **`KVMessage.hpp`** - Client and Server communicate using the message format given in this header file
+    - **`MyDebugger.hpp`** - used to print debugging information
+    - **`MyMemoryPool.hpp`** - a faster alternative to multiple calls of malloc/new operator
+    
 
 
 ### Special Care to be Taken

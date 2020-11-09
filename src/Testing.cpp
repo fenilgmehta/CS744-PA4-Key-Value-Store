@@ -8,9 +8,8 @@
 
 
 #include "MyDebugger.hpp"
-#include "MyVector.hpp"
 #include "KVMessage.hpp"
-#include "KVStore.hpp"
+// #include "KVStore.hpp"
 
 using namespace std;
 using namespace std::chrono;
@@ -64,47 +63,55 @@ int main_file_io() {
     return 0;
 }
 
-int main_vector_test() {
-    auto start = high_resolution_clock::now();
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
 
-    start = high_resolution_clock::now();
-    vector<int> arr1;
-    arr1.reserve(10'00'00'000);
-    for(int64_t i = 0; i < 10'00'00'000; ++i) {
-        arr1.push_back(i);
-    }
-    stop = high_resolution_clock::now();
-    for (int64_t i = 1; i < 10'00'00'000; i += 1'0'00'000) {
-        cout << arr1[i] << endl;
-    }
-    // for(auto &i: arr1) cerr << i;
-    // cerr.flush();
-    duration = duration_cast<microseconds>(stop - start);
-    cerr << "Time taken by function: " << duration.count() << " microseconds" << endl;
-
-    start = high_resolution_clock::now();
-    MyVector<int> arr2(16);
-    // arr2.reserve(10'00)
-    for(int64_t i = 0; i < 10'00'00'000; ++i) {
-        arr2.push_back(i);
-    }
-    stop = high_resolution_clock::now();
-    for (int64_t i = 1; i < 10'00'00'000; i += 1'0'00'000) {
-        cout << arr2.at(i) << endl;
-    }
-    // for(int64_t i = 0; i < arr2.n; ++i) cerr << arr2.at(i);
-    // cerr.flush();
-    duration = duration_cast<microseconds>(stop - start);
-    cerr << "Time taken by function: " << duration.count() << " microseconds" << endl;
-
-    // for(int64_t i = 0; i < 10'00'00'000; ++i) {
-    //     if(arr1[i] != arr2.at(i)) cout << arr1[i] << ", " << arr2.at(i) << endl;
-    // }
-
-    return 0;
-}
+// int main_vector_test(/*vector<int> &arr11, MyVector<int> &arr22*/) {
+//     auto start = high_resolution_clock::now();
+//     auto stop = high_resolution_clock::now();
+//     auto duration = duration_cast<microseconds>(stop - start);
+//
+//     vector<int> arr11;
+//     arr11.reserve(10'00'00'000);
+//     MyVector<int> arr22(10'00'00'000);
+//     int *arr1 = arr11.data();
+//     int *arr2 = arr22.arr;
+//
+//     start = high_resolution_clock::now();
+//     for(int64_t i = 0; i < 10'00'00'000; ++i) {
+//         arr11.push_back(i);
+//         // arr11[i] = i;
+//     }
+//     stop = high_resolution_clock::now();
+//     for (int64_t i = 1; i < 10'00'00'000; i += 1'0'00'000) {
+//         cout << arr11[i] << endl;
+//     }
+//     // for(auto &i: arr1) cerr << i;
+//     // cerr.flush();
+//     duration = duration_cast<microseconds>(stop - start);
+//     cerr << "Time taken by function: " << duration.count() << " microseconds" << endl;
+//
+//     start = high_resolution_clock::now();
+//     // arr2.reserve(10'00'00'000);
+//     for(int64_t i = 0; i < 10'00'00'000; ++i) {
+//         // arr2.push_back(i);
+//         arr22.at(i) = i;
+//         // arr2[i] = i;
+//     }
+//     stop = high_resolution_clock::now();
+//     for (int64_t i = 1; i < 10'00'00'000; i += 1'0'00'000) {
+//         cout << arr22.at(i) << endl;
+//         // cout << arr2[i] << endl;
+//     }
+//     // for(int64_t i = 0; i < arr2.n; ++i) cerr << arr2.at(i);
+//     // cerr.flush();
+//     duration = duration_cast<microseconds>(stop - start);
+//     cerr << "Time taken by function: " << duration.count() << " microseconds" << endl;
+//
+//     // for(int64_t i = 0; i < 10'00'00'000; ++i) {
+//     //     if(arr1[i] != arr2.at(i)) cout << arr1[i] << ", " << arr2.at(i) << endl;
+//     // }
+//
+//     return 0;
+// }
 
 // REFER: https://www.geeksforgeeks.org/measure-execution-time-function-cpp/
 int main_mutex_speed(){
@@ -157,7 +164,11 @@ void db_testing() {
 int main() {
     // return main_kv_message();
     // return main_file_io();
-    main_vector_test();
+    // vector<int> arr1;
+    // arr1.reserve(10'00'00'000);
+    // MyVector<int> arr2(10'00'00'000);
+
+    // main_vector_test(/*arr1, arr2*/);
     // main_mutex_speed();
     // vector<int> a;
     // a.push_back_emplace(1);

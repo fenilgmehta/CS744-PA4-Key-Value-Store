@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <thread>
+#include <mutex>
 
 // REFER: https://stackoverflow.com/questions/2616906/how-do-i-output-coloured-text-to-a-linux-terminal
 enum Code {
@@ -33,31 +34,39 @@ enum Code {
 #define GET_TID() (std::hash<std::thread::id>{}(std::this_thread::get_id()) % 10000000)
 // (std::this_thread::get_id())
 
+    std::mutex loggerMutex;
+
     /* Yellow message */
     template <typename T>
     void log_warning(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false) {
+        loggerMutex.lock();
         if(prependNewLine) std::cerr << '\n';
         std::cerr << color(FG_YELLOW) << "WARNING [TID=" << GET_TID() << "] : " << color(FG_DEFAULT) << msg << '\n';
         if(appendExtraNewLine) std::cerr << '\n';
         std::cerr.flush();
+        loggerMutex.unlock();
     }
 
     /* Blue message */
     template <typename T>
     void log_info(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false) {
+        loggerMutex.lock();
         if(prependNewLine) std::cout << '\n';
         std::cout << color(FG_BLUE) << "INFO [TID=" << GET_TID() << "] : " << color(FG_DEFAULT) << msg << '\n';
         if(appendExtraNewLine) std::cout << '\n';
         std::cout.flush();
+        loggerMutex.unlock();
     }
 
     /* Green message */
     template <typename T>
     void log_success(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false) {
+        loggerMutex.lock();
         if(prependNewLine) std::cout << '\n';
         std::cout << color(FG_GREEN) << "SUCCESS [TID=" << GET_TID() << "] : " << color(FG_DEFAULT) << msg << '\n';
         if(appendExtraNewLine) std::cout << '\n';
         std::cout.flush();
+        loggerMutex.unlock();
     }
 
 #undef GET_TID

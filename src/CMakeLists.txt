@@ -39,7 +39,6 @@ find_package(Threads REQUIRED)
 
 
 add_library(MyDebugger.o OBJECT MyDebugger.hpp)
-add_library(MyVector.o OBJECT MyVector.hpp)
 add_library(MyMemoryPool.o OBJECT MyMemoryPool.hpp)
 
 add_library(KVClientLibrary.o OBJECT KVClientLibrary.hpp)
@@ -72,6 +71,7 @@ add_executable(KVClient KVClient.cpp)
 #)
 
 add_executable(Testing Testing.cpp)
+add_executable(Testing_Database Testing_Database.cpp)
 
 # ---------------------------------------------------------------------------------------------------------------------
 

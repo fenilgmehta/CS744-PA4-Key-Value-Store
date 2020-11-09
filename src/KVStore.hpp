@@ -80,8 +80,10 @@ struct KVStore {
             return false;
         }
 
-        file_fd[file_idx].open(kvStoreFileNames[file_idx], std::ios::in | std::ios::binary);
-        if ((not file_fd[file_idx].is_open()) || file_fd[file_idx].fail()) {
+        std::fstream fs;
+        fs.open(kvStoreFileNames[file_idx], std::ios::in);
+        // fs.open(kvStoreFileNames[file_idx], std::ios::in | std::ios::binary);
+        if ((not fs.is_open()) || fs.fail()) {
             log_error(std::string("") + "Unable to open Database File: \"" + kvStoreFileNames[file_idx] + "\"");
             return false;
         }
@@ -92,27 +94,27 @@ struct KVStore {
         char key_file[256];
 
         const uint64_t inside_file_idx = (ptr->hash1) % FILE_TABLE_LEN;
-        file_fd[file_idx].seekg(get_seek_val(inside_file_idx));
-        file_fd[file_idx].read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
-        file_fd[file_idx].read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
-        file_fd[file_idx].read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
-        file_fd[file_idx].read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
+        fs.seekg(get_seek_val(inside_file_idx));
+        fs.read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
+        fs.read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
+        fs.read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
+        fs.read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
 
         if (is_file_entry_empty(leftIdx, rightIdx)) {
             // There is no entry for this "inside_file_idx" val
             log_info("    Entry List is empty");
-            file_fd[file_idx].close();
+            fs.close();
             return false;
         }
 
         // First entry matches the "Key"
         if (hash1_file == ptr->hash1 && hash2_file == ptr->hash2) {
-            file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
+            fs.read(reinterpret_cast<char *>(key_file), 256);
             if (std::equal(key_file, key_file + 256, ptr->key)) {
                 // match found
                 log_info("    First entry matched");
-                file_fd[file_idx].read(reinterpret_cast<char *>(ptr->value), 256);
-                file_fd[file_idx].close();
+                fs.read(reinterpret_cast<char *>(ptr->value), 256);
+                fs.close();
                 return true;
             }
         }
@@ -124,18 +126,18 @@ struct KVStore {
         uint64_t current_file_idx = rightIdx;
         while (current_file_idx != inside_file_idx) {
             log_info("        Working on idx = " + std::to_string(current_file_idx));
-            file_fd[file_idx].seekg(get_seek_val(current_file_idx));
-            file_fd[file_idx].read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
-            file_fd[file_idx].read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
-            file_fd[file_idx].read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
-            file_fd[file_idx].read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
+            fs.seekg(get_seek_val(current_file_idx));
+            fs.read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
+            fs.read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
+            fs.read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
+            fs.read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
 
             if (hash1_file == ptr->hash1 && hash2_file == ptr->hash2) {
-                file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
+                fs.read(reinterpret_cast<char *>(key_file), 256);
                 if (std::equal(key_file, key_file + 256, ptr->key)) {
                     // match found
-                    file_fd[file_idx].read(reinterpret_cast<char *>(ptr->value), 256);
-                    file_fd[file_idx].close();
+                    fs.read(reinterpret_cast<char *>(ptr->value), 256);
+                    fs.close();
                     return true;
                 }
             }
@@ -143,7 +145,7 @@ struct KVStore {
             current_file_idx = rightIdx;
         }
 
-        file_fd[file_idx].close();
+        fs.close();
         return false;
     }
 
@@ -461,6 +463,8 @@ struct KVStore {
         // fs.seekg(get_seek_val(1000));
         while (fs.is_open() && (not fs.eof())) {
             fs.read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
+            if(not (fs.is_open() && (not fs.eof()))) break;
+
             fs.read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
             fs.read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
             fs.read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
@@ -471,6 +475,7 @@ struct KVStore {
             if (leftIdx == rightIdx && leftIdx == MAX_UINT64) {
                 continue;
             }
+
             log_info("tellg() = " + std::to_string(fs.tellg()), true);
             log_info(std::string() + std::to_string(i)+","
                      + std::to_string(leftIdx) + "," + std::to_string(rightIdx)

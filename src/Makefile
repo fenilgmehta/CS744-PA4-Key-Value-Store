@@ -1,5 +1,5 @@
 
-CUSTOM_HPPS = MyDebugger.hpp MyVector.hpp MyMemoryPool.hpp
+CUSTOM_HPPS = MyDebugger.hpp MyMemoryPool.hpp
 
 CLIENT_DEPENDENTS = $(CUSTOM_HPPS) KVMessage.hpp KVClientLibrary.hpp
 SERVER_DEPENDENTS = $(CUSTOM_HPPS) KVMessage.hpp KVCache.hpp KVStore.hpp
@@ -21,10 +21,10 @@ final_end:
 KVClient: KVClient.cpp $(CLIENT_DEPENDENTS)
 	$(CXX) $(CXXFLAGS_FINAL) $< -o $@
 
-KVServer: KVServer.cpp $(SERVER_DEPENDENTS) KVStoreFileNames_FINAL.o
-	$(CXX) $(CXXFLAGS_FINAL) $< KVStoreFileNames_FINAL.o -o $@
+KVServer: KVServer.cpp $(SERVER_DEPENDENTS) KVStoreFileNames_FINAL.obj
+	$(CXX) $(CXXFLAGS_FINAL) $< KVStoreFileNames_FINAL.obj -o $@
 
-KVStoreFileNames_FINAL.o: KVStoreFileNames.cpp KVStoreFileNames.h
+KVStoreFileNames_FINAL.obj: KVStoreFileNames.cpp KVStoreFileNames.h
 	$(CXX) $(CXXFLAGS_FINAL) $< -c -o $@
 
 # -------------------------------------------------------
@@ -41,13 +41,13 @@ debug_end:
 KVClient_db: KVClient.cpp $(CLIENT_DEPENDENTS)
 	$(CXX) $(CXXFLAGS_FINAL) $< -o KVClient_db
 
-KVServer_db: KVServer.cpp $(SERVER_DEPENDENTS) KVStoreFileNames_DEBUG.o
-	$(CXX) $(CXXFLAGS_FINAL) $< KVStoreFileNames_DEBUG.o -o KVServer_db
+KVServer_db: KVServer.cpp $(SERVER_DEPENDENTS) KVStoreFileNames_DEBUG.obj
+	$(CXX) $(CXXFLAGS_FINAL) $< KVStoreFileNames_DEBUG.obj -o KVServer_db
 
-KVStoreFileNames_DEBUG.o: KVStoreFileNames.cpp KVStoreFileNames.h
+KVStoreFileNames_DEBUG.obj: KVStoreFileNames.cpp KVStoreFileNames.h
 	$(CXX) $(CXXFLAGS_FINAL) $< -c -o $@
 
 # -------------------------------------------------------
 
 clean:
-	rm -f KVClient KVServer *.o
+	rm -f KVClient KVServer KVClient_db KVServer_db *.o

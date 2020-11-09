@@ -3,9 +3,9 @@
 
 #include <shared_mutex>
 #include <atomic>
+#include <vector>
 
 #include "MyDebugger.hpp"
-#include "MyVector.hpp"
 #include "MyMemoryPool.hpp"
 #include "KVMessage.hpp"
 #include "KVStore.hpp"
@@ -136,7 +136,7 @@ struct KVCache {
     uint64_t nMax;
 
     // NOTE: CacheNodeQueuePtr->tail will NOT be used in hastTable
-    MyVector<CacheNodeQueuePtr> hashTable, lruEvictionTable;
+    std::vector<CacheNodeQueuePtr> hashTable, lruEvictionTable;
     MemoryPool<CacheNode> cacheNodeMemoryPool;
 
     // REFER: https://stackoverflow.com/questions/31978324/what-exactly-is-stdatomic
@@ -150,12 +150,6 @@ struct KVCache {
             lruTableInsertIdx(0),
             lruEvictionIdx(0) {
         // TODO - verify if anything more is required - implement the constructor
-        hashTable.expand_to_full_capacity();
-        hashTable.call_constructor_all();
-
-        lruEvictionTable.expand_to_full_capacity();
-        lruEvictionTable.call_constructor_all();
-
         cacheNodeMemoryPool.init(cache_size + HASH_TABLE_LEN, 2);
     }
 
@@ -442,8 +436,8 @@ struct KVCache {
 private:
     [[nodiscard]] inline bool is_not_full() const {
         return (
-                       cacheNodeMemoryPool.memoryBlockPointers.n * cacheNodeMemoryPool.blockSize -
-                       cacheNodeMemoryPool.pool.n
+                       cacheNodeMemoryPool.memoryBlockPointers.size() * cacheNodeMemoryPool.blockSize -
+                       cacheNodeMemoryPool.pool.size()
                ) < nMax;
         // return n < nMax;
     }
@@ -451,7 +445,7 @@ private:
     [[nodiscard]] inline bool is_full() const { return not(is_not_full()); }
 
     [[nodiscard]] inline bool is_empty() const {
-        return cacheNodeMemoryPool.memoryBlockPointers.n * cacheNodeMemoryPool.blockSize == cacheNodeMemoryPool.pool.n;
+        return cacheNodeMemoryPool.memoryBlockPointers.size() * cacheNodeMemoryPool.blockSize == cacheNodeMemoryPool.pool.size();
     }
 
     uint64_t get_next_eviction_queue_idx() {
@@ -470,23 +464,23 @@ private:
 
         // How to make this operation atomic?
         uint64_t index = lruEvictionIdx++;
-        uint64_t id = index % lruEvictionTable.n;
+        uint64_t id = index % lruEvictionTable.size();
 
         // Move ahead if only a single element is present
         while (lruEvictionTable.at(id).head == lruEvictionTable.at(id).tail) {
             index = lruEvictionIdx++;
-            id = index % lruEvictionTable.n;
+            id = index % lruEvictionTable.size();
         }
 
         // If size could wrap, then re-write the modulo value.
         // oldValue keeps getting re-read.
         // modulo occurs when nothing else updates it.
         uint64_t oldValue = lruEvictionIdx;
-        uint64_t newValue = oldValue % lruEvictionTable.n;
+        uint64_t newValue = oldValue % lruEvictionTable.size();
 
         // --- TIME = ~1.2 seconds (for Threads=100, Loop=100000)
         while (!lruEvictionIdx.compare_exchange_weak(oldValue, newValue, std::memory_order_relaxed))
-            newValue = oldValue % lruEvictionTable.n;
+            newValue = oldValue % lruEvictionTable.size();
 
         return id;
         // return lruEvictionTable.at(id);
@@ -495,23 +489,23 @@ private:
     uint64_t get_next_lru_queue_idx() {
         // How to make this operation atomic?
         uint64_t index = lruTableInsertIdx++;
-        uint64_t id = index % lruEvictionTable.n;
+        uint64_t id = index % lruEvictionTable.size();
 
         // Move ahead if only a single element is present
         while (lruEvictionTable.at(id).head == lruEvictionTable.at(id).tail) {
             index = lruTableInsertIdx++;
-            id = index % lruEvictionTable.n;
+            id = index % lruEvictionTable.size();
         }
 
         // If size could wrap, then re-write the modulo value.
         // oldValue keeps getting re-read.
         // modulo occurs when nothing else updates it.
         uint64_t oldValue = lruTableInsertIdx;
-        uint64_t newValue = oldValue % lruEvictionTable.n;
+        uint64_t newValue = oldValue % lruEvictionTable.size();
 
         // --- TIME = ~1.2 seconds (for Threads=100, Loop=100000)
         while (!lruTableInsertIdx.compare_exchange_weak(oldValue, newValue, std::memory_order_relaxed))
-            newValue = oldValue % lruEvictionTable.n;
+            newValue = oldValue % lruEvictionTable.size();
 
         return id;
         // return lruEvictionTable.at(id);

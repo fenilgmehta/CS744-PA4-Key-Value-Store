@@ -8,11 +8,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <csignal>
-
+#include <vector>
+#include <list>
+#include <iterator>
 // ---------------------------------------------------------------------------------------------------------------------
 
 #include "MyDebugger.hpp"
-#include "MyVector.hpp"
 #include "MyMemoryPool.hpp"
 #include "KVMessage.hpp"
 #include "KVCache.hpp"
@@ -32,12 +33,12 @@ struct ServerConfig {
         CacheTypeLFU  // Will NOT be implemented for the assignment
     };
 
-    int32_t listening_port;
-    int32_t socket_listen_n_limit;
-    int32_t thread_pool_size_initial;
-    int32_t thread_pool_growth;
-    int32_t clients_per_thread;
-    int32_t cache_size;
+    int32_t listening_port;  // the port number to bind the socket to
+    int32_t socket_listen_n_limit;  // max number of connection the socket should listen to
+    int32_t thread_pool_size_initial;  // initial number of threads to be created
+    int32_t thread_pool_growth;  // the number of extra threads to be created if all threads have reached the client limits
+    int32_t clients_per_thread;  // number of clients that are to be served per thread
+    int32_t cache_size;  // number of entries that can be kept in the cache
 
     // Of NO use as only one Cache Replacement Policy will be implemented for the Assignment
     enum CacheReplacementPolicyType cache_replacement_policy;
@@ -61,6 +62,7 @@ struct ServerConfig {
         conf_file.open(configFile, std::ios::in);
         std::string key;
         int32_t val;
+
         // LISTENING_PORT 12345
         // SOCKET_LISTEN_N_LIMIT 1024
         // THREAD_POOL_SIZE_INITIAL 2
@@ -93,7 +95,7 @@ struct WorkerThreadInfo {
 
     // Main Thread will insert new client File Descriptors to this vector and then the Worker Thread
     // will insert all the Client File Descriptors in this into "client_fds" at regular intervals.
-    struct MyVector<int> client_fds_new;
+    std::vector<int> client_fds_new;
 
     // Lock to ensure only one of Main Thread and Worker thread are working on "client_fds_new"
     // std::mutex is faster than pthread_mutex_t when tested
@@ -105,15 +107,17 @@ struct WorkerThreadInfo {
     uint32_t thread_id;
 
     // REFER: https://stackoverflow.com/questions/30867779/correct-pthread-t-initialization-and-handling#:~:text=pthread_t%20is%20a%20C%20type,it%20true%20once%20pthread_create%20succeeds.
-    explicit WorkerThreadInfo(int32_t clientsPerThread, MemoryPool<KVMessage> *poolManager, KVCache *kvCache,
-                              uint32_t threadId) :
+    WorkerThreadInfo(int32_t clientsPerThread, MemoryPool<KVMessage> *poolManager, KVCache *kvCache,
+                     uint32_t threadId) :
             thread_obj(),
             client_fds_count(0),
-            client_fds_new(clientsPerThread),
+            client_fds_new(),
             mutex_new_client_fds(),
             pool_manager{poolManager},
             kv_cache{kvCache},
-            thread_id{threadId} {}
+            thread_id{threadId} {
+        client_fds_new.reserve(clientsPerThread);
+    }
 
     void start_thread() {
         // Start the worker thread with "WorkerThreadInfo" pointer = ptr
@@ -148,6 +152,7 @@ void *worker_thread(void *ptr) {
     while (true) {
         // Use epoll and serve clients using KVCache/KVStore
         // REFER: https://stackoverflow.com/questions/46591671/epoll-wait-events-buffer-reset
+        // log_info("Calling \"epoll\"");
         event_count = epoll_wait(epollfd, events, global_server_config->clients_per_thread, 3000);
 
         thread_conf->mutex_serving_clients.lock();
@@ -160,7 +165,8 @@ void *worker_thread(void *ptr) {
                 }
 
                 // REFER: https://stackoverflow.com/questions/12340695/how-to-check-if-a-given-file-descriptor-stored-in-a-variable-is-still-valid
-                int bytesRead = read(events[i].data.fd, reinterpret_cast<void *>(&message.status_code), sizeof(uint8_t));
+                int bytesRead = read(events[i].data.fd, reinterpret_cast<void *>(&message.status_code),
+                                     sizeof(uint8_t));
 
                 if (bytesRead == 0) {
                     // Connection was closed
@@ -230,9 +236,9 @@ void *worker_thread(void *ptr) {
         thread_conf->mutex_serving_clients.unlock();
 
         thread_conf->mutex_new_client_fds.lock();
-        if ((thread_conf->client_fds_new).n != 0) {
+        if (!(thread_conf->client_fds_new).empty()) {
             // New clients have been assigned to this thread by the Main Thread
-            for (uint32_t i = 0; i < (thread_conf->client_fds_new).n; ++i) {
+            for (uint32_t i = 0; i < (thread_conf->client_fds_new).size(); ++i) {
                 events[0].events = EPOLLIN;
                 events[0].data.fd = thread_conf->client_fds_new.at(i);
                 if (epoll_ctl(epollfd, EPOLL_CTL_ADD, thread_conf->client_fds_new.at(i),
@@ -256,7 +262,7 @@ void *worker_thread(void *ptr) {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-struct MyVector<WorkerThreadInfo> *global_thread_pool;
+std::list<WorkerThreadInfo> *global_thread_pool;
 struct KVCache *globalKVCache;
 
 void main_thread() {
@@ -286,16 +292,16 @@ void main_thread() {
     // ----------------------------------------------------
 
     // Create "serverConfig.thread_pool_size_initial" threads
-    // 4 is multiplied to ensure sufficient space is there in the vector to accommodate for
-    // future increase in tServer initialization complete :)he number of threads in the "thread_pool"
-    struct MyVector<WorkerThreadInfo> thread_pool(4 * serverConfig.thread_pool_size_initial);
+    // REFER: https://stackoverflow.com/questions/16465633/how-can-i-use-something-like-stdvectorstdmutex
+    std::list<WorkerThreadInfo> thread_pool;
+    // thread_pool.reserve(serverConfig.thread_pool_size_initial);
     global_thread_pool = &thread_pool;
 
     for (int32_t i = 0; i < serverConfig.thread_pool_size_initial; ++i) {
-        thread_pool.push_back_emplace(
-                serverConfig.clients_per_thread, &memPoolKVMessage, &kvCache, i + 1
-        );
-        thread_pool.at(i).start_thread();
+        // WorkerThreadInfo worker(serverConfig.clients_per_thread, &memPoolKVMessage, &kvCache, i + 1);
+        // thread_pool.push_back(worker);
+        thread_pool.emplace_back(serverConfig.clients_per_thread, &memPoolKVMessage, &kvCache, i + 1);
+        thread_pool.rbegin()->start_thread();
     }
 
     // REFER: https://stackoverflow.com/questions/16486361/creating-a-basic-c-c-tcp-socket-writer
@@ -319,7 +325,7 @@ void main_thread() {
 
     // Binding newly created socket to given IP
     if ((bind(sockfd, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr))) != 0) {
-        log_error("Socket BIND failed...");
+        log_error("Socket BIND failed... port number already used: " + std::to_string(serverConfig.listening_port));
         log_error("Exiting (status=63)");
         exit(63);
     }
@@ -331,10 +337,7 @@ void main_thread() {
         exit(64);
     }
 
-    // rr_current_idx - the last "WorkerThreadInfo" index which was used to add the last client request received
-    // rr_idx_test - used to store the index of the "WorkerThreadInfo" which is to be tested for assigning the new client
     // rr_iter - is used just like "i" in a for loop only
-    int32_t rr_current_idx = -1, rr_idx_test;
     size_t rr_iter;
     int rr_success;
 
@@ -342,8 +345,10 @@ void main_thread() {
     unsigned int client_len;
     int client_fd_new;
 
-    log_success("Server waiting for clients :)", true, true);
+    log_success("Server waiting for clients :) on port number" + std::to_string(serverConfig.listening_port), true,
+                true);
 
+    auto listIter = thread_pool.begin();
     while (true) {
         // Perform accept() on the listening socket and pass each established connection
         // to one of the "thread_pool.n" threads using Round Robin fashion
@@ -359,17 +364,16 @@ void main_thread() {
                  + ", Port = " + std::to_string(ntohs(client_addr.sin_port)));
 
         // Assign the client to one of the threads in the "thread_pool"
-        rr_current_idx = (rr_current_idx + 1) % thread_pool.n;
         rr_success = 0;
 
-        for (rr_iter = 0; rr_iter < thread_pool.n; ++rr_iter) {
-            rr_idx_test = (rr_current_idx + rr_iter) % thread_pool.n;
+        for (rr_iter = 0; rr_iter < thread_pool.size(); ++rr_iter, ++listIter) {
+            if (listIter == thread_pool.end()) listIter = thread_pool.begin();
 
-            std::mutex &mutex_to_test = thread_pool.arr[rr_idx_test].mutex_new_client_fds;
+            std::mutex &mutex_to_test = listIter->mutex_new_client_fds;
             mutex_to_test.lock();
-            if (thread_pool.arr[rr_idx_test].client_fds_count < serverConfig.clients_per_thread) {
+            if (listIter->client_fds_count < serverConfig.clients_per_thread) {
                 // Assign the client connection to the worker thread "thread_pool.arr[rr_idx_test]"
-                thread_pool.at(rr_idx_test).client_fds_new.push_back(client_fd_new);
+                listIter->client_fds_new.push_back(client_fd_new);
 
                 // unlock the mutex and exit the loop
                 mutex_to_test.unlock();
@@ -380,24 +384,30 @@ void main_thread() {
         }
 
         if (rr_success) {
-            rr_current_idx = rr_idx_test;
-            log_info("Main Thread: client assigned to thread_id = " +
-                     std::to_string(thread_pool.at(rr_idx_test).thread_id));
+            log_info("Main Thread: client assigned to thread_id = " + std::to_string(listIter->thread_id));
+            ++listIter;
         } else {
-            rr_current_idx = thread_pool.n;
-
             // Add new "WorkerThreadInfo" object with default values to the vector
             // Initialise the newly inserted "WorkerThreadInfo" object
-            thread_pool.push_back_emplace(serverConfig.clients_per_thread, &memPoolKVMessage, &kvCache,
-                                          thread_pool.size() + 1);
+            // WorkerThreadInfo worker(serverConfig.clients_per_thread, &memPoolKVMessage, &kvCache, thread_pool.size() + 1);
+            // thread_pool.push_back(worker);
+            thread_pool.emplace_back(serverConfig.clients_per_thread, &memPoolKVMessage, &kvCache,
+                                     thread_pool.size() + 1);
 
             // Insert the new client File Descriptor in "client_fds_new"
             // No need to acquire the lock as the Worker Thread for this object is not running
-            thread_pool.at(rr_current_idx).client_fds_new.push_back(client_fd_new);
-            thread_pool.at(rr_current_idx).start_thread();  // Start the Worker Thread
+            auto templistIter = thread_pool.rbegin();
+            templistIter->client_fds_new.push_back(client_fd_new);
+            templistIter->start_thread();  // Start the Worker Thread
+            listIter = thread_pool.begin();
+
+            for (int32_t i = 1; i < serverConfig.thread_pool_growth; ++i) {
+                thread_pool.emplace_back(serverConfig.clients_per_thread, &memPoolKVMessage, &kvCache,
+                                         thread_pool.size() + 1);
+            }
         }
 
-        // break;  // TODO: remove this line
+        // break;  // This is only to be used for testing/debugging
     }
 }
 
@@ -405,13 +415,16 @@ void main_thread() {
 
 void signal_callback_handler(int signalNumber) {
     log_warning("CTRL+C pressed. Closing the server...", true);
-    for (size_t i = 0; i < global_thread_pool->n; ++i) {
+    for (auto &i : *global_thread_pool) {
         // acquire mutex for all threads so that they stop after serving the clients
         // for that particular iteration
-        global_thread_pool->at(i).mutex_serving_clients.lock();
+        log_info("Waiting for thread_id = " + std::to_string(i.thread_id) + " / " +
+                 std::to_string(global_thread_pool->size()));
+        i.mutex_serving_clients.lock();
     }
-    if(globalKVCache != nullptr)
-        globalKVCache->cache_clean();
+    log_info("Performing cache cleanup");
+    // if (globalKVCache != nullptr)
+    //     globalKVCache->cache_clean();
     log_success("Server cleanup complete :)", true, true);
     exit(0);
 }
