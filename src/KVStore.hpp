@@ -7,8 +7,10 @@
 #include <bitset>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include "MyDebugger.hpp"
 #include "KVMessage.hpp"
-#include "KVStoreFileNames.hpp"
+#include "KVStoreFileNames.h"
 
 // Number of linked-lists that point to circular lists of "CacheNode"
 // The number of files in the Persistent Storage is equal to the below value
@@ -39,9 +41,14 @@ struct KVStore {
         }
 
         // This is VERY IMPORTANT
-        chdir("db");
+        int changeDirResult = chdir("db");
+        if(changeDirResult != 0) {
+            log_error("chdir(\"db\") failed :(");
+            log_error("Exiting (status=65)");
+            exit(65);
+        }
 
-        for (int i = 0; i < HASH_TABLE_LEN; ++i) {
+        for (uint32_t i = 0; i < HASH_TABLE_LEN; ++i) {
             file_exists_status.set(
                     i, does_file_exists(kvStoreFileNames[i])
             );
@@ -65,7 +72,6 @@ struct KVStore {
         log_info(std::string() + "    hash1 = " + std::to_string(ptr->hash1));
         log_info(std::string() + "    hahs2 = " + std::to_string(ptr->hash2));
         log_info(std::string() + "    key   = " + ptr->key);
-        log_info(std::string() + "    value = " + ptr->value);
         log_info(std::string() + "    FILE  = " + std::to_string(file_idx));
 
         // return false if file does not exists
@@ -175,7 +181,7 @@ struct KVStore {
             }
 
             // IMPORTANT: insert "FILE_TABLE_LEN" number of blank entries
-            for (int i = 0; i < FILE_TABLE_LEN; ++i) {
+            for (uint32_t i = 0; i < FILE_TABLE_LEN; ++i) {
                 fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                 fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                 fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
@@ -309,7 +315,7 @@ struct KVStore {
             return false;
         }
 
-        uint64_t leftIdx, rightIdx, hash1_file, hash2_file, leftIdx_of_key_to_delete, idx_of_key_to_delete;
+        uint64_t leftIdx, rightIdx, hash1_file, hash2_file, idx_of_key_to_delete;
         char key_file[256], value_file[256];
 
         const uint64_t inside_file_idx = (ptr->hash1) % FILE_TABLE_LEN;
@@ -349,7 +355,6 @@ struct KVStore {
                     // NOTE: More than ONE entry found
                     //       This will work even if there are only two entries
                     idx_of_key_to_delete = inside_file_idx;
-                    leftIdx_of_key_to_delete = leftIdx;
 
                     // read RHS of node to delete
                     file_fd[file_idx].seekg(get_seek_val(rightIdx) + sizeof(uint64_t));
@@ -434,7 +439,7 @@ struct KVStore {
         return false;
     }
 
-    void read_db_file(const int num) {
+    void read_db_file(const int32_t num) const {
         if (not file_exists_status.test(num)) {
             log_error("read_db_file(" + std::to_string(num) + ") file does not exists");
             return;
@@ -449,7 +454,7 @@ struct KVStore {
             return;
         }
 
-        uint64_t leftIdx, rightIdx, hash1_file, hash2_file, leftIdx_of_key_to_delete, idx_of_key_to_delete;
+        uint64_t leftIdx, rightIdx, hash1_file, hash2_file;
         char key_file[256], value_file[256];
 
         int32_t i = -1;
@@ -492,7 +497,6 @@ private:
 
     static inline bool is_file_entry_empty(const uint64_t leftIdx, const uint64_t rightIdx) {
         return (leftIdx == rightIdx && leftIdx == MAX_UINT64);
-        return true;
     }
 };
 

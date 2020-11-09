@@ -72,8 +72,6 @@ struct ClientServerConnection {
     }
 
     ~ClientServerConnection() {
-        uint8_t connectionClose = 245;
-        write(socketFD, reinterpret_cast<const void *>(&connectionClose), sizeof(uint8_t));
         log_info("Closing the socket connection...");
         close(socketFD);
     }

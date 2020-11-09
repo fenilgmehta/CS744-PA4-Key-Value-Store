@@ -5,9 +5,9 @@
 #include <sys/stat.h>
 
 #include "MyDebugger.hpp"
-#include "KVClientLibrary.hpp"
-#include "KVMessage.hpp"
 #include "MyVector.hpp"
+#include "KVMessage.hpp"
+#include "KVClientLibrary.hpp"
 
 using namespace std;
 using namespace std::chrono;
@@ -23,21 +23,23 @@ void start_sending_requests(MyVector<KVMessage> &dataset, const char *server_ip 
     log_info("-----+-----+-----");
     log_info(dataset.size());
     for (int64_t i = 0; i < dataset.n; ++i) {
-        log_info(string("") + to_string((int) dataset.at(i).status_code) + " " + dataset.at(i).key + " " + ((dataset.at(i).status_code == KVMessage::EnumGET) ? dataset.at(i).value : " "));
+        log_info(string("") + to_string((int) dataset.at(i).status_code) + " " + dataset.at(i).key + " " +
+                 ((dataset.at(i).status_code == KVMessage::EnumGET) ? dataset.at(i).value : " "));
     }
     log_info("-----+-----+-----");
 #endif
 
     ClientServerConnection connection(server_ip, server_port);
-    int request_number = 1;
-    for (int64_t j = 0; j < dataset.n; ++j) {
+    int32_t request_number = 1;
+    for (size_t j = 0; j < dataset.n; ++j) {
         KVMessage &i = dataset.at(j);
         i.fix_key_nulling();
 
         log_info(string("Working on Request Number = ") + to_string(request_number), true);
-        log_info(string("    ") + "Request code = " + to_string(i.status_code) + " [" + i.status_code_to_string() + "]");
+        log_info(
+                string("    ") + "Request code = " + to_string(i.status_code) + " [" + i.status_code_to_string() + "]");
         log_info(string("    ") + "Key = " + i.key);
-        if(i.is_request_code_PUT()) log_info(string("    ") + "Message = " + i.value);
+        if (i.is_request_code_PUT()) log_info(string("    ") + "Message = " + i.value);
         ++request_number;
 
         // No other case is possible because they are handled while reading the dataset file
@@ -92,7 +94,7 @@ MyVector<KVMessage> load_client_request_dataset(char *filename) {
 
     uint32_t request_type;
     struct KVMessage temp;
-    for (int i = 0; i < requestCount; ++i) {
+    for (uint32_t i = 0; i < requestCount; ++i) {
         // Request Codes: 1=GET, 2=PUT, 3=DELETE
         fileReader >> request_type;
         if (not KVMessage::is_request_code_valid(request_type)) {
@@ -129,7 +131,7 @@ int main(int argc, char *argv[]) {
         // TODO: add technique to measure execution time
         // REFER: https://www.geeksforgeeks.org/measure-execution-time-function-cpp/
         auto start = high_resolution_clock::now();
-        start_sending_requests(dataset, (argc >=3) ? argv[2] : "127.0.0.1", (argc >= 4) ? argv[3] : "12345");
+        start_sending_requests(dataset, (argc >= 3) ? argv[2] : "127.0.0.1", (argc >= 4) ? argv[3] : "12345");
         auto stop = high_resolution_clock::now();
         auto duration = duration_cast<microseconds>(stop - start);
         cout << "Time taken by function: " << duration.count() << " microseconds" << endl;

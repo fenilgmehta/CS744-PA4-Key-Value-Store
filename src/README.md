@@ -1,15 +1,35 @@
-# CS744-PA4-Key-Value-Store
+# Key Value Store
 
 
 - **Subject** - Design and Engineering of Computing Systems (CS 744)
-- **Assignment 4** - TO build a performant and scalable Key Value Store from scratch using the *C language*
-    - Multiple clients connect to the key-value server and once connected, repeatedly send requests for either getting the value associated with a key or putting a new key-value pair.
+
+- **Assignment 4** - To build a performant and scalable Key Value Store from scratch using the *C/C++ language*
+    - Multiple clients connect to the key-value server and once connected, repeatedly send requests for either getting the value associated with a key or putting a new key-value pair or deleting an entry associated with a key.
     - Communication between the clients and the server will take place over the network through sockets.
+    
 - **Team Members**
     - 203050054 - Fenil Mehta
     - 203050110 - Vipin Mahawar
     - 203050xxx - Priyesh Jain
 
+
+### Compilation and Execution
+- Compiling Server and Client
+  ```sh
+  make all
+  ```
+
+- Executing Server
+  ```sh
+  # Can edit the server configuration in KVServer.conf
+  ./KVServer
+  ```
+
+- Executing Client
+  ```sh
+  # ./KVClient client_request_002.txt SERVER_IP SERVER_PORT
+  ./KVClient client_request_002.txt 127.0.0.1 12345
+  ```
 
 ### Implementation Details
 - Source Code structure
@@ -21,7 +41,6 @@
     - **`KVClientLibrary.hpp`** - API provided by the server for the Client. This is a library, which will encode and decode your request and response messages.
         - For example, at the client side this library will encode your request message to the decided message format, and then send it out to the server process. Similarly, it will decode the response received from the server, and then hand out the decoded response to the KVClient module. 
     - **`KVMessage.hpp`** - Client and Server communicate using the message format given in this header file
-    - **`KVMessageFormat.hpp`**
 
 
 ### Special Care to be Taken

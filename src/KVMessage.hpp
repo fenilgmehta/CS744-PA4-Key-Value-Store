@@ -2,6 +2,7 @@
 #define PA_4_KEY_VALUE_STORE_KVMESSAGE_HPP
 
 #include <cstdint>
+#include <string>
 
 #define KV_STR_LEN 256
 
@@ -65,9 +66,9 @@ struct KVMessage {
 
     void fix_key_nulling() {
         bool zeroEncountered = false;
-        for(int i = 0; i < 256; ++i) {
-            if(key[i] == '\0') zeroEncountered = true;
-            if(zeroEncountered) key[i] = '\0';
+        for(char & i : key) {
+            if(i == '\0') zeroEncountered = true;
+            if(zeroEncountered) i = '\0';
         }
     }
 
@@ -113,7 +114,7 @@ struct KVMessage {
 
         // REFER: https://stackoverflow.com/questions/12773257/does-auto-type-assignments-of-a-pointer-in-c11-require
         auto p = reinterpret_cast<const unsigned char *>(key);
-        int i;
+        int_fast16_t i;
 
         // Very IMPORTANT to initialize the hash values to 0 to ensure
         // that past calls to calculate_key_hash(...) does not affect

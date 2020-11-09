@@ -19,7 +19,7 @@
  * */
 template<typename T>
 struct MyVector {
-    size_t n{}, nMax{};
+    size_t n, nMax;
     T *arr;
 
     /* Constructor */
@@ -32,22 +32,24 @@ struct MyVector {
         free(this->arr);
     }
 
+    // ----------------------------------------------------------------------------------------------------
+
     // REFER: https://stackoverflow.com/questions/11313517/malloc-and-constructors-in-c?lq=1
-    template <class... Args>
-    inline void call_constructor(const size_t idx, Args&&... args) {
+    template<class... Args>
+    inline void call_constructor_at(const size_t idx, Args &&... args) {
         new(arr + idx) T(args...);
     }
 
-    template <class... Args>
-    void call_constructor(size_t first_idx, const size_t last_idx, Args&&... args) {
-        for(; first_idx != last_idx; ++first_idx) {
+    template<class... Args>
+    void call_constructor_ranged(size_t first_idx, const size_t last_idx, Args &&... args) {
+        for (; first_idx != last_idx; ++first_idx) {
             new(arr + first_idx) T(args...);
         }
     }
 
-    template <class... Args>
-    void call_constructor_all(Args&&... args) {
-        call_constructor(0, n, args...);
+    template<class... Args>
+    void call_constructor_all(Args &&... args) {
+        call_constructor_ranged(0, n, args...);
     }
 
     inline void call_destructor(const size_t idx) {
@@ -55,7 +57,7 @@ struct MyVector {
     }
 
     void call_destructor(size_t first_idx, const size_t last_idx) {
-        for(; first_idx != last_idx; ++first_idx) {
+        for (; first_idx != last_idx; ++first_idx) {
             (arr + first_idx)->~T();
         }
     }
@@ -64,26 +66,59 @@ struct MyVector {
         call_destructor(0, n);
     }
 
-    inline T &at(const size_t idx) {
-        return this->arr[idx];
+    // ----------------------------------------------------------------------------------------------------
+
+    template<class... Args>
+    bool push_back_emplace(Args &&... args) {
+        if (this->n == this->nMax) {
+            if (not(this->reserve(this->nMax * 4))) {
+                /* if reserve fails */
+                return false;
+            }
+        }
+
+        call_constructor_at(this->n, args...);
+        this->n += 1;
+        return true;
     }
 
-    /* Reverse indexing, i.e. 0 points to last element(i.e. index = n-1) of MyVector */
-    inline T &at_rev(const size_t idx) {
-        return this->arr[n-1-idx];
+    inline void pop_back_emplace() {
+        if (this->n <= 1) this->n = 0;
+        else this->n -= 1;
+
+        // REFER: https://www.geeksforgeeks.org/possible-call-constructor-destructor-explicitly/
+        // explicitly call the destructor
+        call_destructor(this->n);
+        return this->arr[this->n];
+    }
+
+    // ----------------------------------------------------------------------------------------------------
+
+    inline T &at(const size_t idx) {
+        return this->arr[idx];
     }
 
     inline const T &at(const size_t idx) const {
         return this->arr[idx];
     }
 
+    /* Reverse indexing, i.e. 0 points to last element(i.e. index = n-1) of MyVector */
+    inline T &at_rev(const size_t idx) {
+        return this->arr[n - 1 - idx];
+    }
+
+    /* Reverse indexing, i.e. 0 points to last element(i.e. index = n-1) of MyVector */
+    inline const T &at_rev(const size_t idx) const {
+        return this->arr[n - 1 - idx];
+    }
+
     // TODO: check who all are calling push_back and see if object are properly constructed or not ?
 
     /* RETURNS: true if push_back was successful */
-    bool push_back() {
+    bool push_back_empty() {
         if (this->n == this->nMax) {
-            if (not(this->resize(this->nMax * 2))) {
-                /* if resize fails */
+            if (not(this->reserve(this->nMax * 2))) {
+                /* if reserve fails */
                 return false;
             }
         }
@@ -94,8 +129,8 @@ struct MyVector {
     /* RETURNS: true if push_back was successful */
     bool push_back(const T &val) {
         if (this->n == this->nMax) {
-            if (not(this->resize(this->nMax * 4))) {
-                /* if resize fails */
+            if (not(this->reserve(this->nMax * 4))) {
+                /* if reserve fails */
                 return false;
             }
         }
@@ -104,40 +139,21 @@ struct MyVector {
         return true;
     }
 
-    template <class... Args>
-    bool emplace_back(Args&&... args) {
-        if (this->n == this->nMax) {
-            if (not(this->resize(this->nMax * 4))) {
-                /* if resize fails */
-                return false;
-            }
-        }
-        call_constructor(this->n, args...);
-        this->n += 1;
-        return true;
-    }
-
-    /* RETURNS: the last element popped */
+    /* RETURNS: IF non-empty --> the last element popped, OTHERWISE arr[0] */
     inline T &pop_back() {
         if (this->n <= 1) this->n = 0;
         else this->n -= 1;
 
-        // REFER: https://www.geeksforgeeks.org/possible-call-constructor-destructor-explicitly/
-        // explicitly call the destructor
-        call_destructor(this->n);
         return this->arr[this->n];
     }
 
-    /* RETURNS: the last element popped
-     * CAUTION: the destructor will only be called for the last element popped
-     * */
+    /* RETURNS: IF non-empty --> the last element popped, OTHERWISE arr[0] */
     inline T &pop_back(const size_t popCount) {
         if (popCount <= 0) return this->arr[0];
+
         if (this->n <= popCount) this->n = 0;
         else this->n -= popCount;
 
-        // explicitly call the destructor for the last element popped
-        call_destructor(this->n, this->n + popCount);
         return this->arr[this->n];
     }
 
@@ -146,12 +162,12 @@ struct MyVector {
         this->n = 0;
     }
 
-    void fill(const T& val) {
-        for(size_t i = 0; i < n; ++i) arr[i] = val;
+    void fill(const T &val) {
+        for (size_t i = 0; i < n; ++i) arr[i] = val;
     }
 
-    /* RETURNS: true if resize was successful */
-    bool resize(const size_t newSize) {
+    /* RETURNS: true if reserve was successful */
+    bool reserve(const size_t newSize) {
         T *arrNew = static_cast<T *>(realloc(this->arr, sizeof(T) * newSize));
         if (arrNew != NULL) {
             this->arr = arrNew;
@@ -169,7 +185,7 @@ struct MyVector {
     }
 
     [[nodiscard]] inline bool empty() const {
-        return this-n == 0;
+        return this->n == 0;
     }
 
 };

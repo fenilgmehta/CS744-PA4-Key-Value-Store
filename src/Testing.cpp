@@ -64,34 +64,44 @@ int main_file_io() {
     return 0;
 }
 
-int main_deque() {
-
+int main_vector_test() {
     auto start = high_resolution_clock::now();
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+
+    start = high_resolution_clock::now();
     vector<int> arr1;
     arr1.reserve(10'00'00'000);
     for(int64_t i = 0; i < 10'00'00'000; ++i) {
         arr1.push_back(i);
     }
+    stop = high_resolution_clock::now();
+    for (int64_t i = 1; i < 10'00'00'000; i += 1'0'00'000) {
+        cout << arr1[i] << endl;
+    }
     // for(auto &i: arr1) cerr << i;
     // cerr.flush();
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-    cout << "Time taken by function: " << duration.count() << " microseconds" << endl;
+    duration = duration_cast<microseconds>(stop - start);
+    cerr << "Time taken by function: " << duration.count() << " microseconds" << endl;
 
     start = high_resolution_clock::now();
-    MyVector<int> arr2(10000);
+    MyVector<int> arr2(16);
+    // arr2.reserve(10'00)
     for(int64_t i = 0; i < 10'00'00'000; ++i) {
         arr2.push_back(i);
     }
+    stop = high_resolution_clock::now();
+    for (int64_t i = 1; i < 10'00'00'000; i += 1'0'00'000) {
+        cout << arr2.at(i) << endl;
+    }
     // for(int64_t i = 0; i < arr2.n; ++i) cerr << arr2.at(i);
     // cerr.flush();
-    stop = high_resolution_clock::now();
     duration = duration_cast<microseconds>(stop - start);
-    cout << "Time taken by function: " << duration.count() << " microseconds" << endl;
+    cerr << "Time taken by function: " << duration.count() << " microseconds" << endl;
 
-    for(int64_t i = 0; i < 10'00'00'000; ++i) {
-        if(arr1[i] != arr2.at(i)) cout << arr1[i] << ", " << arr2.at(i) << endl;
-    }
+    // for(int64_t i = 0; i < 10'00'00'000; ++i) {
+    //     if(arr1[i] != arr2.at(i)) cout << arr1[i] << ", " << arr2.at(i) << endl;
+    // }
 
     return 0;
 }
@@ -103,7 +113,7 @@ int main_mutex_speed(){
     pthread_mutex_init(&m1, nullptr);
 
     auto start = high_resolution_clock::now();
-    for(int i = 0; i < 10'00'000; ++i) {
+    for(int32_t i = 0; i < 10'00'000; ++i) {
         pthread_mutex_lock(&m1);
         a1+=1;
         pthread_mutex_unlock(&m1);
@@ -115,7 +125,7 @@ int main_mutex_speed(){
 
     start = high_resolution_clock::now();
     mutex m2;
-    for(int i = 0; i < 10'00'000; ++i) {
+    for(int32_t i = 0; i < 10'00'000; ++i) {
         m2.lock();
         a2+=1;
         m2.unlock();
@@ -147,11 +157,11 @@ void db_testing() {
 int main() {
     // return main_kv_message();
     // return main_file_io();
-    // main_deque();
+    main_vector_test();
     // main_mutex_speed();
     // vector<int> a;
-    // a.emplace_back(1);
-    db_testing();
+    // a.push_back_emplace(1);
+    // db_testing();
 
     return 0;
 }

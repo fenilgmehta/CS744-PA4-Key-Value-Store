@@ -8,7 +8,7 @@
 /*
  * REFER: https://stackoverflow.com/questions/855763/is-malloc-thread-safe
  *
- * ASSUMED: type T has a default constructor which takes not arguments
+ * ASSUMED: type T has a default constructor which takes NO arguments
  *
  * */
 template<typename T>
@@ -17,21 +17,29 @@ struct MemoryPool {
     MyVector<T *> pool;
     MyVector<T *> memoryBlockPointers;
     std::mutex m;
+    bool callConstructor;
 
-    MemoryPool() : blockSize{1024}, pool(2048), memoryBlockPointers(4), m() {}
+    explicit MemoryPool(bool call_constructor) :
+            blockSize{1024},
+            pool(2048),
+            memoryBlockPointers(2),
+            m(),
+            callConstructor{call_constructor} {}
 
-    void init(size_t block_size) {
+    void init(size_t block_size, size_t blocks_required = 2) {
         blockSize = block_size;
-        pool.resize(2 * block_size);
-        memoryBlockPointers.resize(4);
+        pool.reserve(blocks_required * block_size);
+        memoryBlockPointers.reserve(blocks_required);
         allocate_one_block();
     }
 
     ~MemoryPool() {
         for (int64_t i = 0; i < this->memoryBlockPointers.n; ++i) {
-            for (int64_t j = 0; j < blockSize; ++j) {
-                // Call Destructor
-                (memoryBlockPointers.at(i) + j)->~T();
+            // Call Destructor IF flag is set
+            if (callConstructor) {
+                for (int64_t j = 0; j < blockSize; ++j) {
+                    (memoryBlockPointers.at(i) + j)->~T();
+                }
             }
             free(this->memoryBlockPointers.at(i));
         }
@@ -64,15 +72,6 @@ struct MemoryPool {
         m.unlock();
     }
 
-    template<class... Args>
-    void call_constructor(T *ptr, Args &&... args) {
-        new(ptr) T(args...);
-    }
-
-    void call_destructor(T *ptr) {
-        ptr->~T();
-    }
-
 private:
     void allocate_one_block() {
         memoryBlockPointers.push_back(reinterpret_cast<T *>(malloc(this->blockSize * sizeof(T))));
@@ -84,10 +83,18 @@ private:
             log_error("Exiting (status=61)");
             exit(61);
         } else {
+            if(callConstructor) {
+                for (int64_t i = 0; i < this->blockSize; ++i) {
+                    new(new_block_ptr + i) T();  // Call the default constructor
+                    pool.push_back(new_block_ptr + i);
+                }
+            } else {
+                for (int64_t i = 0; i < this->blockSize; ++i) {
+                    // NO Constructor called
+                    pool.push_back(new_block_ptr + i);
+                }
+            }
             for (int64_t i = 0; i < this->blockSize; ++i) {
-                // Call Default Constructor
-                pool.push_back(new_block_ptr + i);
-                new(new_block_ptr + i) T();
             }
         }
     }

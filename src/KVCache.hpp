@@ -54,9 +54,10 @@ struct CacheNode {
         DirtyBit_INVALID = 2,
         DirtyBit_TODELETE = 3
     };
+
     struct KVMessage message;
 
-    // NOT circular
+    // Doubly Linked List (NOT circular)
     struct CacheNode *l1_left, *l1_right;  // Doubly Linked List - layer 1 of Cache
     struct CacheNode *l2_prev, *l2_next;  // Doubly Linked List - layer 2 to maintain LRU info
 
@@ -145,17 +146,17 @@ struct KVCache {
             nMax{cache_size},
             hashTable(HASH_TABLE_LEN),  // = 16384
             lruEvictionTable((cache_size >= 10240) ? 128 : ((10240 > cache_size && cache_size >= 1024) ? 32 : 1)),
-            cacheNodeMemoryPool(),
-            lruEvictionIdx(0),
-            lruTableInsertIdx(0) {
+            cacheNodeMemoryPool(true),
+            lruTableInsertIdx(0),
+            lruEvictionIdx(0) {
         // TODO - verify if anything more is required - implement the constructor
         hashTable.expand_to_full_capacity();
-        lruEvictionTable.expand_to_full_capacity();
-
         hashTable.call_constructor_all();
+
+        lruEvictionTable.expand_to_full_capacity();
         lruEvictionTable.call_constructor_all();
 
-        cacheNodeMemoryPool.init(cache_size + HASH_TABLE_LEN);
+        cacheNodeMemoryPool.init(cache_size + HASH_TABLE_LEN, 2);
     }
 
     /* ASSUMED: ptr->key is correctly filled in ptr
