@@ -31,7 +31,7 @@ enum Code {
     template <typename T>
     void log_warning(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false){
         if(prependNewLine) std::cerr << '\n';
-        std::cerr << color(FG_YELLOW) << "ERROR: " << color(FG_DEFAULT) << msg << '\n';
+        std::cerr << color(FG_YELLOW) << "WARNING: " << color(FG_DEFAULT) << msg << '\n';
         if(appendExtraNewLine) std::cerr << '\n';
         std::cerr.flush();
     }
@@ -49,7 +49,7 @@ enum Code {
     template <typename T>
     void log_success(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false){
         if(prependNewLine) std::cout << '\n';
-        std::cout << color(FG_GREEN) << "ERROR: " << color(FG_DEFAULT) << msg << '\n';
+        std::cout << color(FG_GREEN) << "SUCCESS: " << color(FG_DEFAULT) << msg << '\n';
         if(appendExtraNewLine) std::cout << '\n';
         std::cout.flush();
     }

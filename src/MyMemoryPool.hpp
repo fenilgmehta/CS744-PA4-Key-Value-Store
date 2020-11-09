@@ -51,7 +51,7 @@ struct MemoryPool {
     T *acquire_instance_strict_limit() {
         m.lock();
         if (memoryBlockPointers.empty()) {
-            return nullptr
+            return nullptr;
         }
         T *instance_ptr = memoryBlockPointers.pop_back();
         m.unlock();

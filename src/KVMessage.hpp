@@ -10,6 +10,7 @@ struct KVMessage {
     enum StatusCodeEnum {
         EnumGET = 1, EnumPUT = 2, EnumDEL = 3, EnumSUCCESS = 200, EnumERROR = 240
     };
+    constexpr static const char ERROR_MESSAGE[256] = "Entry not found";
     static const uint8_t StatusCodeValueGET = EnumGET;
     static const uint8_t StatusCodeValuePUT = EnumPUT;
     static const uint8_t StatusCodeValueDEL = EnumDEL;
@@ -27,9 +28,9 @@ struct KVMessage {
      * The main role of this method is to ensure that all characters
      * after the '\0' character are null ('\0') in the variable "key"
      * */
-    void set_key(char *ptr) {
+    void set_key(const char *ptr) {
         int_fast16_t i = 0;
-        for (; i < 256 && ptr; ++i, ++ptr) {
+        for (; i < 256 && (*ptr); ++i, ++ptr) {
             key[i] = *ptr;
         }
         for (; i < 256; ++i) {
@@ -37,9 +38,14 @@ struct KVMessage {
         }
     }
 
-    void set_value(char *ptr) {
+    /* "ptr" is a null terminated pointer to char array
+     *
+     * The main role of this method is to ensure that all characters
+     * after the '\0' character are null ('\0') in the variable "value"
+     * */
+    void set_value(const char *ptr) {
         int_fast16_t i = 0;
-        for (; i < 256 && ptr; ++i, ++ptr) {
+        for (; i < 256 && (*ptr); ++i, ++ptr) {
             value[i] = *ptr;
         }
         for (; i < 256; ++i) {
@@ -57,25 +63,19 @@ struct KVMessage {
             value[i] = ptr[i];
     }
 
-    /* "ptr" is a null terminated pointer to char array
-     *
-     * The main role of this method is to ensure that all characters
-     * after the '\0' character are null ('\0') in the variable "value"
-     * */
-    void set_value(char *ptr) {
-        int_fast16_t i = 0;
-        for (; i < 256 && ptr; ++i, ++ptr) {
-            value[i] = *ptr;
-        }
-        for (; i < 256; ++i) {
-            value[i] = '\0';
+    void fix_key_nulling() {
+        bool zeroEncountered = false;
+        for(int i = 0; i < 256; ++i) {
+            if(key[i] == '\0') zeroEncountered = true;
+            if(zeroEncountered) key[i] = '\0';
         }
     }
 
-
     void calculate_key_hash() {
         // if value of any hash is non-zero, then return, because it means that it has been calculated in the past
-        if (hash1 != 0 || hash2 != 0) return;
+        // if (hash1 != 0 || hash2 != 0) return;
+        // NOTE: above line is commented because we are re-calculating hash for the same
+        //       KVMessage object with the updated value of the "Key"
 
         /* 
          * For hash1:
@@ -115,10 +115,23 @@ struct KVMessage {
         auto p = reinterpret_cast<const unsigned char *>(key);
         int i;
 
+        // Very IMPORTANT to initialize the hash values to 0 to ensure
+        // that past calls to calculate_key_hash(...) does not affect
+        // the results
+        hash1 = hash2 = 0;
         for (i = 0; i < KV_STR_LEN; i++) {
             hash1 = 33 * hash1 + p[i];
             hash2 = 33 * hash2 + (random_nums[i] * p[i]);
         }
+    }
+
+    inline std::string status_code_to_string() const {
+        if(status_code == EnumGET) return "GET";
+        if(status_code == EnumPUT) return "PUT";
+        if(status_code == EnumDEL) return "DELETE";
+        if(status_code == EnumSUCCESS) return "SUCCESS";
+        if(status_code == EnumERROR) return "ERROR";
+        return "Invalid status code";
     }
 
     [[nodiscard]] inline bool is_request_code_GET() const { return is_request_code_GET(status_code); }
@@ -170,6 +183,7 @@ const uint8_t KVMessage::StatusCodeValuePUT;
 const uint8_t KVMessage::StatusCodeValueDEL;
 const uint8_t KVMessage::StatusCodeValueSUCCESS;
 const uint8_t KVMessage::StatusCodeValueERROR;
+constexpr char KVMessage::ERROR_MESSAGE[256];
 
 
 #endif // PA_4_KEY_VALUE_STORE_KVMESSAGE_HPP

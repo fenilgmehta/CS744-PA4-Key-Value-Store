@@ -104,6 +104,19 @@ struct MyVector {
         return true;
     }
 
+    template <class... Args>
+    bool emplace_back(Args&&... args) {
+        if (this->n == this->nMax) {
+            if (not(this->resize(this->nMax * 4))) {
+                /* if resize fails */
+                return false;
+            }
+        }
+        call_constructor(this->n, args...);
+        this->n += 1;
+        return true;
+    }
+
     /* RETURNS: the last element popped */
     inline T &pop_back() {
         if (this->n <= 1) this->n = 0;

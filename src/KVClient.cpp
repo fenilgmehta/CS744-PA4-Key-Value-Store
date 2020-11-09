@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstdint>
 #include <fstream>
+#include <chrono>
 #include <sys/stat.h>
 
 #include "MyDebugger.hpp"
@@ -9,10 +10,11 @@
 #include "MyVector.hpp"
 
 using namespace std;
+using namespace std::chrono;
 
 
 /* Used for load testing */
-void start_sending_requests(const MyVector<KVMessage> &dataset, const char *server_ip = "127.0.0.1",
+void start_sending_requests(MyVector<KVMessage> &dataset, const char *server_ip = "127.0.0.1",
                             const char *server_port = "12345") {
 #ifdef DEBUGGING_ON
     log_info("-----+-----+-----", true);
@@ -21,8 +23,7 @@ void start_sending_requests(const MyVector<KVMessage> &dataset, const char *serv
     log_info("-----+-----+-----");
     log_info(dataset.size());
     for (int64_t i = 0; i < dataset.n; ++i) {
-        log_info(string("") + to_string((int) dataset.at(i).status_code) + " " + dataset.at(i).key + " " +
-                 dataset.at(i).value);
+        log_info(string("") + to_string((int) dataset.at(i).status_code) + " " + dataset.at(i).key + " " + ((dataset.at(i).status_code == KVMessage::EnumGET) ? dataset.at(i).value : " "));
     }
     log_info("-----+-----+-----");
 #endif
@@ -30,19 +31,25 @@ void start_sending_requests(const MyVector<KVMessage> &dataset, const char *serv
     ClientServerConnection connection(server_ip, server_port);
     int request_number = 1;
     for (int64_t j = 0; j < dataset.n; ++j) {
-        const KVMessage &i = dataset.at(j);
+        KVMessage &i = dataset.at(j);
+        i.fix_key_nulling();
 
-        log_info(string("Working on Request Number = ") + to_string(request_number));
+        log_info(string("Working on Request Number = ") + to_string(request_number), true);
+        log_info(string("    ") + "Request code = " + to_string(i.status_code) + " [" + i.status_code_to_string() + "]");
+        log_info(string("    ") + "Key = " + i.key);
+        if(i.is_request_code_PUT()) log_info(string("    ") + "Message = " + i.value);
         ++request_number;
 
         // No other case is possible because they are handled while reading the dataset file
         switch (i.status_code) {
             case KVMessage::EnumGET:
                 connection.GET(i);
-                if (not equal(i.value, i.value + 256, connection.resultValue)) {
-                    log_error(
-                            "*** Server response was not consistent with what was expected if this is the only client updating the server, or if all clients are making request for different keys ***");
-                }
+                log_info(string() + "Result of GET = \"" + connection.resultValue + "\"");
+                // if (not equal(i.value, i.value + 256, connection.resultValue)) {
+                //     log_error("*** Server response was not consistent with what was expected if this is "
+                //               "the only client updating the server, or if all clients are making request "
+                //               "for different keys ***");
+                // }
                 break;
             case KVMessage::EnumPUT:
                 connection.PUT(i);
@@ -121,7 +128,12 @@ int main(int argc, char *argv[]) {
 
         // TODO: add technique to measure execution time
         // REFER: https://www.geeksforgeeks.org/measure-execution-time-function-cpp/
+        auto start = high_resolution_clock::now();
         start_sending_requests(dataset, (argc >=3) ? argv[2] : "127.0.0.1", (argc >= 4) ? argv[3] : "12345");
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop - start);
+        cout << "Time taken by function: " << duration.count() << " microseconds" << endl;
+
         return 0;
     }
 

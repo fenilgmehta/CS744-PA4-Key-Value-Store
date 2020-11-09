@@ -1,5 +1,19 @@
 #include <iostream>
+#include <fstream>
+#include <array>
+#include <deque>
+#include <vector>
+#include <chrono>
+#include <mutex>
+
+
+#include "MyDebugger.hpp"
+#include "MyVector.hpp"
 #include "KVMessage.hpp"
+#include "KVStore.hpp"
+
+using namespace std;
+using namespace std::chrono;
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "UnreachableCode"
@@ -32,8 +46,113 @@ int main_kv_message() {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+int main_file_io() {
+    fstream f;
+    // f.open("/home/student/Desktop/Fenil/fenil_Laptop/25_fenil_practice/0050_IIT Bombay/CS744 - DECS/CS744-PA4-Key-Value-Store/src/"
+    //        "aa.bin", ios::binary | ios::in | ios::out | ios::app);
+    // f.close();
+    // cout << system("mkdir -p db") << endl;
+
+    fstream File("d.txt", ios::in | ios::out );
+    File.seekg(0, ios::end);
+    File << "TutorialsPoint";
+    // char F[9];
+    // File.read(F, 5);
+    // F[5] = 0;
+    // cout <<F<< endl;
+    File.close();
+    return 0;
+}
+
+int main_deque() {
+
+    auto start = high_resolution_clock::now();
+    vector<int> arr1;
+    arr1.reserve(10'00'00'000);
+    for(int64_t i = 0; i < 10'00'00'000; ++i) {
+        arr1.push_back(i);
+    }
+    // for(auto &i: arr1) cerr << i;
+    // cerr.flush();
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+    cout << "Time taken by function: " << duration.count() << " microseconds" << endl;
+
+    start = high_resolution_clock::now();
+    MyVector<int> arr2(10000);
+    for(int64_t i = 0; i < 10'00'00'000; ++i) {
+        arr2.push_back(i);
+    }
+    // for(int64_t i = 0; i < arr2.n; ++i) cerr << arr2.at(i);
+    // cerr.flush();
+    stop = high_resolution_clock::now();
+    duration = duration_cast<microseconds>(stop - start);
+    cout << "Time taken by function: " << duration.count() << " microseconds" << endl;
+
+    for(int64_t i = 0; i < 10'00'00'000; ++i) {
+        if(arr1[i] != arr2.at(i)) cout << arr1[i] << ", " << arr2.at(i) << endl;
+    }
+
+    return 0;
+}
+
+// REFER: https://www.geeksforgeeks.org/measure-execution-time-function-cpp/
+int main_mutex_speed(){
+    int a1=0, a2=0;
+    pthread_mutex_t m1;
+    pthread_mutex_init(&m1, nullptr);
+
+    auto start = high_resolution_clock::now();
+    for(int i = 0; i < 10'00'000; ++i) {
+        pthread_mutex_lock(&m1);
+        a1+=1;
+        pthread_mutex_unlock(&m1);
+    }
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+    cout << "Time taken by function: " << duration.count() << " microseconds" << endl;
+
+
+    start = high_resolution_clock::now();
+    mutex m2;
+    for(int i = 0; i < 10'00'000; ++i) {
+        m2.lock();
+        a2+=1;
+        m2.unlock();
+    }
+    stop = high_resolution_clock::now();
+    duration = duration_cast<microseconds>(stop - start);
+    cout << "Time taken by function: " << duration.count() << " microseconds" << endl;
+
+    if(a1!= a2) {
+        cout << "ERROR111";
+    }
+    pthread_mutex_destroy(&m1);
+    return 0;
+}
+
+void db_testing() {
+    kvPersistentStore.init_kvstore();  // This is present in KVStore.hpp
+    for(int32_t i = 0; i < HASH_TABLE_LEN; ++i) {
+        if(not kvPersistentStore.file_exists_status.test(i)) continue;
+        kvPersistentStore.read_db_file(i);
+    }
+    // KVMessage kvm;
+    // kvm.set_key("asdf");
+    // kvm.set_value("1234");
+    // kvm.calculate_key_hash();
+    // kvPersistentStore.write_to_db(&kvm);
+}
+
 int main() {
-    return main_kv_message();
+    // return main_kv_message();
+    // return main_file_io();
+    // main_deque();
+    // main_mutex_speed();
+    // vector<int> a;
+    // a.emplace_back(1);
+    db_testing();
+
     return 0;
 }
 

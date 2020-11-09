@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <csignal>
+#include <fcntl.h>
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -23,7 +24,6 @@
 
 // ---------------------------------------------------------------------------------------------------------------------
 void *worker_thread(void *);
-int sockfd;
 
 struct ServerConfig {
     // REFER: https://www.geeksforgeeks.org/enumeration-enum-c/
@@ -89,7 +89,7 @@ struct WorkerThreadInfo {
     pthread_t thread_obj;
 
     // Worker Thread will iterate through this vector for list of clients to serve using "epoll(...)"
-    struct MyVector<int> client_fds;
+    int32_t client_fds_count;
 
     // Main Thread will insert new client File Descriptors to this vector and then the Worker Thread
     // will insert all the Client File Descriptors in this into "client_fds" at regular intervals.
@@ -102,14 +102,18 @@ struct WorkerThreadInfo {
     MemoryPool<KVMessage> *pool_manager;
     KVCache *kv_cache;
 
+    uint32_t thread_id;
+
     // REFER: https://stackoverflow.com/questions/30867779/correct-pthread-t-initialization-and-handling#:~:text=pthread_t%20is%20a%20C%20type,it%20true%20once%20pthread_create%20succeeds.
-    explicit WorkerThreadInfo(int32_t clientsPerThread, MemoryPool<KVMessage> *poolManager, KVCache *kvCache) :
+    explicit WorkerThreadInfo(int32_t clientsPerThread, MemoryPool<KVMessage> *poolManager, KVCache *kvCache,
+                              uint32_t threadId) :
             thread_obj(),
-            client_fds(clientsPerThread),
+            client_fds_count(0),
             client_fds_new(clientsPerThread),
             mutex_new_client_fds(),
             pool_manager{poolManager},
-            kv_cache{kvCache} {}
+            kv_cache{kvCache},
+            thread_id{threadId} {}
 
     void start_thread() {
         // Start the worker thread with "WorkerThreadInfo" pointer = ptr
@@ -120,64 +124,141 @@ struct WorkerThreadInfo {
 
 struct WorkerThreadInfo WorkerThreadInfo_DEFAULT();
 
+struct ServerConfig *global_server_config;
+
 #define READ_SIZE 256
 #define MAX_EVENTS 50
+
 void *worker_thread(void *ptr) {
     auto thread_conf = static_cast<struct WorkerThreadInfo *>(ptr);
+    log_info(std::string("Thread ID = ") + std::to_string(thread_conf->thread_id) + " : started");
 
-    int32_t i;
-    /*Creating epoll instance*/
-	int epollfd;
-	epollfd = epoll_create1(0);
-	if(epollfd < -1){
-		std::cerr<< "Failed to create epoll instance...";
-	}
-	/*Creating necessary fd in epoll*/
-	struct epoll_event event;
-	event.events = EPOLLIN;
-	event.data.fd = sockfd;
-	if(epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &event)){
-		std::cerr << "epoll ctl failed...";
-	}
-	int event_count;
-	size_t bytes_read;
-	struct epoll_event events[MAX_EVENTS];
-	char read_buffer [READ_SIZE+1];
+    /* Creating epoll instance */
+    int epollfd;
+    epollfd = epoll_create1(0);
+    if (epollfd < -1) {
+        log_error("Thread ID = " + std::to_string(thread_conf->thread_id) + " : Failed to create epoll instance...");
+        thread_conf->client_fds_count = -1;
+        return nullptr;
+    }
+
+    /* Creating necessary fd in epoll */
+    int event_count;
+    struct epoll_event events[global_server_config->clients_per_thread];
+
+    struct KVMessage message;
 
     while (true) {
-        // TODO - Use epoll and serve clients using Cache
-    	event_count = epoll_wait(epollfd, events, MAX_EVENTS, 3000);
+        // Use epoll and serve clients using KVCache/KVStore
+        // REFER: https://stackoverflow.com/questions/46591671/epoll-wait-events-buffer-reset
+        event_count = epoll_wait(epollfd, events, global_server_config->clients_per_thread, 3000);
 
-		for(int i=0; i<event_count; i++){
-			if (events[i].events & EPOLLERR ||events[i].events & EPOLLHUP || !(events[i].events & EPOLLIN)){
-				std::cerr << "Epoll event error\n";
-				close(events[i].data.fd);
-				break;
-			}
-			if (event_count == 0) {
-				std::cout << "Connection Close for " << events[i].data.fd << "\n";
-				close(events[i].data.fd);
-				break;
-			}
-			bytes_read = read(events[i].data.fd, read_buffer, READ_SIZE);
-			read_buffer[bytes_read] = '\0';
+        if (event_count != -1) {
+            for (uint32_t i = 0; i < event_count; i++) {
+                // if (flag & EPOLLRDHUP) {
+                //     /* Connection was closed. */
+                //     deleteConnectionData(...);
+                //     return;
+                // }
+                if (events[i].events & EPOLLERR || events[i].events & EPOLLHUP || (!events[i].events & EPOLLIN)) {
+                    log_error("cerr: Epoll event error");
+                    // std::cerr << "cerr: Epoll event error\n";
+                    // close(events[i].data.fd);
+                    break;
+                }
 
-			//Do something with Key-value Cache...
+                // REFER: https://stackoverflow.com/questions/12340695/how-to-check-if-a-given-file-descriptor-stored-in-a-variable-is-still-valid
+                // https://stackoverflow.com/questions/8707601/is-it-necessary-to-deregister-a-socket-from-epoll-before-closing-it
+                if (fcntl(events[i].data.fd, F_GETFD) != -1 || errno != EBADF) {
+                    read(events[i].data.fd, reinterpret_cast<void *>(&message.status_code), sizeof(uint8_t));
+                    if(message.status_code == 245) {
+                        goto label_close_client_fd;
+                    }
+                    if (not message.is_request_code_valid()) {
+                        log_error("Thread ID = " + std::to_string(thread_conf->thread_id)
+                                  + " : Invalid request code = " + std::to_string(message.status_code));
+                        write(events[i].data.fd, reinterpret_cast<const void *>(&KVMessage::StatusCodeValueERROR),
+                              sizeof(uint8_t));
+                        continue;
+                    }
 
-    	}
+                    read(events[i].data.fd, reinterpret_cast<void *>(message.key), 256);
+                    message.calculate_key_hash();  // This was to be done by CACHE, but CACHE is skipped
+                    if (message.is_request_code_GET()) {
+                        bool res = kvPersistentStore.read_from_db(&message);
+                        write(
+                                events[i].data.fd,
+                                reinterpret_cast<const void *>(
+                                        (res) ? (&KVMessage::StatusCodeValueSUCCESS)
+                                              : (&KVMessage::StatusCodeValueERROR)
+                                ),
+                                sizeof(uint8_t)
+                        );
+                        write(
+                                events[i].data.fd,
+                                reinterpret_cast<const void *>(
+                                        (res) ? (message.value) : (KVMessage::ERROR_MESSAGE)
+                                ),
+                                256
+                        );
+                    } else if (message.is_request_code_PUT()) {
+                        read(events[i].data.fd, reinterpret_cast<void *>(message.value), 256);
+                        kvPersistentStore.write_to_db(&message);
+                        write(
+                                events[i].data.fd,
+                                reinterpret_cast<const void *>(&KVMessage::StatusCodeValueSUCCESS),
+                                sizeof(uint8_t)
+                        );
+                    } else {
+                        // DELETE request code
+                        bool res = kvPersistentStore.delete_from_db(&message);
+                        write(
+                                events[i].data.fd,
+                                reinterpret_cast<const void *>(
+                                        (res) ? (&KVMessage::StatusCodeValueSUCCESS)
+                                              : (&KVMessage::StatusCodeValueERROR)
+                                ),
+                                sizeof(uint8_t)
+                        );
+                        if (not res) {
+                            write(
+                                    events[i].data.fd,
+                                    reinterpret_cast<const void *>(KVMessage::ERROR_MESSAGE),
+                                    256
+                            );
+                        }
+                    }
+                } else {
+                    // REFER: https://stackoverflow.com/questions/8707601/is-it-necessary-to-deregister-a-socket-from-epoll-before-closing-it
+                    label_close_client_fd:
+                        log_info("FD closed: " + std::to_string(events[i].data.fd));
+                        close(events[i].data.fd); // Will unregister the File Descriptor from epoll
+                        --(thread_conf->client_fds_count);
+                }
+            }
+        }
         // TODO - remove client File Descriptors whose connection has closed/ended
 
         thread_conf->mutex_new_client_fds.lock();
         if ((thread_conf->client_fds_new).n != 0) {
             // New clients have been assigned to this thread by the Main Thread
-            for (i = 0; i < (thread_conf->client_fds_new).n; ++i) {
-                thread_conf->client_fds.push_back(thread_conf->client_fds_new.at(i));
+            for (uint32_t i = 0; i < (thread_conf->client_fds_new).n; ++i) {
+                events[0].events = EPOLLIN;
+                events[0].data.fd = thread_conf->client_fds_new.at(i);
+                if (epoll_ctl(epollfd, EPOLL_CTL_ADD, thread_conf->client_fds_new.at(i),
+                              &events[0])) {
+                    log_error("Thread ID = " + std::to_string(thread_conf->thread_id) + " : epoll ctl failed...");
+                    return nullptr;
+                }
+                // thread_conf->client_fds.push_back(thread_conf->client_fds_new.at(i));
+                ++(thread_conf->client_fds_count);
+
             }
             thread_conf->client_fds_new.clear();
         }
         thread_conf->mutex_new_client_fds.unlock();
 
-        break;  // TODO: remove this line
+        // break;  // TODO: remove this line
     }
 
     return nullptr;  // can modify this to return something else
@@ -192,38 +273,36 @@ void main_thread() {
     log_info("+ Server initialization started...");
 
     log_info("    [1/3] Reading server config");
-    ServerConfig globalServerConfig{};
-    globalServerConfig.read_server_config();
+    ServerConfig serverConfig{};
+    serverConfig.read_server_config();
+    global_server_config = &serverConfig;
 
     log_info("    [2/3] Initializing memory pool");
     MemoryPool<KVMessage> globalPoolKVMessage;
     globalPoolKVMessage.init(
-            globalServerConfig.thread_pool_size_initial * globalServerConfig.clients_per_thread
+            serverConfig.thread_pool_size_initial * serverConfig.clients_per_thread
     );
 
     log_info("    [3/4] Initializing Persistent Storage (Hard disk) helpers");
     kvPersistentStore.init_kvstore();  // This is present in KVStore.hpp
 
     log_info("    [4/4] Initializing Cache");
-    KVCache kvCache(globalServerConfig.cache_size);
+    KVCache kvCache(serverConfig.cache_size);
     globalKVCache = &kvCache;
 
     log_info("Server initialization finished :)", false, true);
 
     // ----------------------------------------------------
 
-    // Create "globalServerConfig.thread_pool_size_initial" threads
+    // Create "serverConfig.thread_pool_size_initial" threads
     // 4 is multiplied to ensure sufficient space is there in the vector to accommodate for
-    // future increase in the number of threads in the "thread_pool"
-    struct MyVector<WorkerThreadInfo> thread_pool(4 * globalServerConfig.thread_pool_size_initial);
+    // future increase in tServer initialization complete :)he number of threads in the "thread_pool"
+    struct MyVector<WorkerThreadInfo> thread_pool(4 * serverConfig.thread_pool_size_initial);
     global_thread_pool = &thread_pool;
 
-    // this will give better performance as compared to calling "push_back_default" multiple times
-    thread_pool.n = globalServerConfig.thread_pool_size_initial;
-
-    for (int i = 0; i < globalServerConfig.thread_pool_size_initial; ++i) {
-        thread_pool.push_back(
-                WorkerThreadInfo(globalServerConfig.clients_per_thread, &globalPoolKVMessage, &kvCache)
+    for (int i = 0; i < serverConfig.thread_pool_size_initial; ++i) {
+        thread_pool.emplace_back(
+                serverConfig.clients_per_thread, &globalPoolKVMessage, &kvCache, i + 1
         );
         thread_pool.at(i).start_thread();
     }
@@ -245,7 +324,7 @@ void main_thread() {
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);  // TODO: verify the use of "htonl" here
-    serv_addr.sin_port = htons(globalServerConfig.listening_port);
+    serv_addr.sin_port = htons(serverConfig.listening_port);
 
     // Binding newly created socket to given IP
     if ((bind(sockfd, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr))) != 0) {
@@ -254,8 +333,8 @@ void main_thread() {
         exit(63);
     }
     // Now server is ready to listen
-    if ((listen(sockfd, globalServerConfig.socket_listen_n_limit)) != 0) {
-        // MAYBE "globalServerConfig.listening_port" is already in use
+    if ((listen(sockfd, serverConfig.socket_listen_n_limit)) != 0) {
+        // MAYBE "serverConfig.listening_port" is already in use
         log_error("Socket LISTEN failed...");
         log_error("Exiting (status=64)");
         exit(64);
@@ -271,7 +350,7 @@ void main_thread() {
     unsigned int client_len;
     int client_fd_new;
 
-    log_success("Server initialization complete :)");
+    log_success("Server waiting for clients :)", true, true);
 
     while (true) {
         // Perform accept() on the listening socket and pass each established connection
@@ -296,7 +375,7 @@ void main_thread() {
 
             std::mutex &mutex_to_test = thread_pool.arr[rr_idx_test].mutex_new_client_fds;
             mutex_to_test.lock();
-            if (thread_pool.arr[rr_idx_test].client_fds.n < globalServerConfig.clients_per_thread) {
+            if (thread_pool.arr[rr_idx_test].client_fds_count < serverConfig.clients_per_thread) {
                 // Assign the client connection to the worker thread "thread_pool.arr[rr_idx_test]"
                 thread_pool.at(rr_idx_test).client_fds_new.push_back(client_fd_new);
 
@@ -310,12 +389,15 @@ void main_thread() {
 
         if (rr_success) {
             rr_current_idx = rr_idx_test;
+            log_info("Main Thread: client assigned to thread_id = " +
+                     std::to_string(thread_pool.at(rr_idx_test).thread_id));
         } else {
             rr_current_idx = thread_pool.n;
 
             // Add new "WorkerThreadInfo" object with default values to the vector
             // Initialise the newly inserted "WorkerThreadInfo" object
-            thread_pool.push_back();
+            thread_pool.emplace_back(serverConfig.clients_per_thread, &globalPoolKVMessage, &kvCache,
+                                     thread_pool.size() + 1);
 
             // Insert the new client File Descriptor in "client_fds_new"
             // No need to acquire the lock as the Worker Thread for this object is not running
@@ -334,14 +416,15 @@ void main_thread() {
 // Call cacheClear()
 
 void signal_callback_handler(int signum) {
-    log_error("CTRL+C pressed. Closing the server...", true);
-    for(int i = 0; i < global_thread_pool->n; ++i) {
+    log_warning("CTRL+C pressed. Closing the server...", true);
+    for (int i = 0; i < global_thread_pool->n; ++i) {
         // acquire mutex for all threads so that they stop at that point
         global_thread_pool->at(i).mutex_new_client_fds.lock();
     }
-    globalKVCache->cache_clean();
+    if(globalKVCache != nullptr)
+        globalKVCache->cache_clean();
+    log_success("Server cleanup complete :)", true, true);
     exit(0);
-    log_error("Server cleanup complete :)", false, true);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -352,6 +435,8 @@ int main() {
     signal(SIGINT, signal_callback_handler);
 
     main_thread();
+    // kvPersistentStore.init_kvstore();  // This is present in KVStore.hpp
+    // kvPersistentStore.read_db_file(14398);
     return 0;
 }
 

@@ -72,6 +72,9 @@ struct ClientServerConnection {
     }
 
     ~ClientServerConnection() {
+        uint8_t connectionClose = 245;
+        write(socketFD, reinterpret_cast<const void *>(&connectionClose), sizeof(uint8_t));
+        log_info("Closing the socket connection...");
         close(socketFD);
     }
 
@@ -91,7 +94,7 @@ struct ClientServerConnection {
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(&(KVMessage::StatusCodeValueGET)), 1))
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(message.key), 256))
 
-        ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultStatusCode), 1))
+        ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(&resultStatusCode), 1))
         ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultValue), 256))
         print_result_returned("GET");
     }
@@ -102,11 +105,12 @@ struct ClientServerConnection {
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(message.key), 256))
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(message.value), 256))
 
-        ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultStatusCode), 1))
-        if (KVMessage::is_request_result_ERROR(resultStatusCode)) {
-            ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultValue), 256))
-            std::copy(std::begin(REQUEST_FAILURE_MSG), std::end(REQUEST_FAILURE_MSG), resultValue);
-        }
+        ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(&resultStatusCode), 1))
+        // NOTE: the below code will never run as server will always be able to successfully put/update the "Value"
+        // if (KVMessage::is_request_result_ERROR(resultStatusCode)) {
+        //     ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultValue), 256))
+        //     std::copy(std::begin(REQUEST_FAILURE_MSG), std::end(REQUEST_FAILURE_MSG), resultValue);
+        // }
         print_result_returned("PUT");
     }
 
@@ -115,10 +119,10 @@ struct ClientServerConnection {
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(&(KVMessage::StatusCodeValueDEL)), 1))
         ASSERT_SUCCESS(write(socketFD, reinterpret_cast<const void *>(message.key), 256))
 
-        ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultStatusCode), 1))
+        ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(&resultStatusCode), 1))
         if (KVMessage::is_request_result_ERROR(resultStatusCode)) {
             ASSERT_SUCCESS(read(socketFD, reinterpret_cast<void *>(resultValue), 256))
-            std::copy(std::begin(REQUEST_FAILURE_MSG), std::end(REQUEST_FAILURE_MSG), resultValue);
+            // std::copy(std::begin(REQUEST_FAILURE_MSG), std::end(REQUEST_FAILURE_MSG), resultValue);
         }
         print_result_returned("DELETE");
     }

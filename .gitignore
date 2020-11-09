@@ -54,3 +54,5 @@ dkms.conf
 src/.idea/
 
 src/cmake-build-debug/
+
+src/db/

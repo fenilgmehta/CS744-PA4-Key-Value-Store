@@ -25,6 +25,11 @@ set(CMAKE_C_FLAGS_RELEASE "-O3")
 ## REFER: https://stackoverflow.com/questions/4765222/how-do-i-produce-only-an-object-file-o-from-a-cmake-build-target
 ## REFER: https://cmake.org/cmake/help/latest/command/add_library.html#object-libraries
 
+# REFER: https://stackoverflow.com/questions/1620918/cmake-and-libpthread
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
+
 add_library(MyVector.o OBJECT MyVector.hpp)
 add_library(KVMessage.o OBJECT KVMessage.hpp)
 add_library(KVMessageFormat.o OBJECT KVMessageFormat.hpp)
@@ -44,6 +49,8 @@ add_executable(
         $<TARGET_OBJECTS:KVMessageFormat.o>
         $<TARGET_OBJECTS:MyDebugger.o>
 )
+
+target_link_libraries(KVServer PRIVATE Threads::Threads)
 
 add_library(KVClientLibrary.o OBJECT KVClientLibrary.hpp)
 add_executable(
