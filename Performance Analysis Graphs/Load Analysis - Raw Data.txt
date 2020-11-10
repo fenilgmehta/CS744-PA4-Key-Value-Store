@@ -1,0 +1,170 @@
+- Sample file name: "res_6_2_1.txt", lets denote the three numbers with x=6, y=2, z=1
+- File name description
+	- 6 denotes that "client_request_006.txt" was used for generating the below data
+	- 2 denotes that 2 clients were sending requests in parallel to the server
+	- 1 denotes the client number which was used to send the requests, this value 1 <= z <= y
+
+==> res_6_1_1.txt <==
+Time taken by function: 6019190 microseconds
+
+==> res_6_2_1.txt <==
+Time taken by function: 4276428 microseconds
+
+==> res_6_2_2.txt <==
+Time taken by function: 3632233 microseconds
+
+==> res_6_3_1.txt <==
+Time taken by function: 5561647 microseconds
+
+==> res_6_3_2.txt <==
+Time taken by function: 5388909 microseconds
+
+==> res_6_3_3.txt <==
+Time taken by function: 4633525 microseconds
+
+==> res_6_4_1.txt <==
+Time taken by function: 3343597 microseconds
+
+==> res_6_4_2.txt <==
+Time taken by function: 4534050 microseconds
+
+==> res_6_4_3.txt <==
+Time taken by function: 3911033 microseconds
+
+==> res_6_4_4.txt <==
+Time taken by function: 4878216 microseconds
+
+==> res_6_5_1.txt <==
+Time taken by function: 3953909 microseconds
+
+==> res_6_5_2.txt <==
+Time taken by function: 5270720 microseconds
+
+==> res_6_5_3.txt <==
+Time taken by function: 5324497 microseconds
+
+==> res_6_5_4.txt <==
+Time taken by function: 4911803 microseconds
+
+==> res_6_5_5.txt <==
+Time taken by function: 4672638 microseconds
+
+==> res_6_6_1.txt <==
+Time taken by function: 3118536 microseconds
+
+==> res_6_6_2.txt <==
+Time taken by function: 6200475 microseconds
+
+==> res_6_6_3.txt <==
+Time taken by function: 3927475 microseconds
+
+==> res_6_6_4.txt <==
+Time taken by function: 3340781 microseconds
+
+==> res_6_6_5.txt <==
+Time taken by function: 3965600 microseconds
+
+==> res_6_6_6.txt <==
+Time taken by function: 4472541 microseconds
+
+==> res_6_7_1.txt <==
+Time taken by function: 4814784 microseconds
+
+==> res_6_7_2.txt <==
+Time taken by function: 3581401 microseconds
+
+==> res_6_7_3.txt <==
+Time taken by function: 2857822 microseconds
+
+==> res_6_7_4.txt <==
+Time taken by function: 5413486 microseconds
+
+==> res_6_7_5.txt <==
+Time taken by function: 5579736 microseconds
+
+==> res_6_7_6.txt <==
+Time taken by function: 4314774 microseconds
+
+==> res_6_7_7.txt <==
+Time taken by function: 4935655 microseconds
+
+==> res_6_8_1.txt <==
+Time taken by function: 4688136 microseconds
+
+==> res_6_8_2.txt <==
+Time taken by function: 4990316 microseconds
+
+==> res_6_8_3.txt <==
+Time taken by function: 2650417 microseconds
+
+==> res_6_8_4.txt <==
+Time taken by function: 4794108 microseconds
+
+==> res_6_8_5.txt <==
+Time taken by function: 5900487 microseconds
+
+==> res_6_8_6.txt <==
+Time taken by function: 3111549 microseconds
+
+==> res_6_8_7.txt <==
+Time taken by function: 5517008 microseconds
+
+==> res_6_8_8.txt <==
+Time taken by function: 4057840 microseconds
+
+==> res_6_9_1.txt <==
+Time taken by function: 3920099 microseconds
+
+==> res_6_9_2.txt <==
+Time taken by function: 5092111 microseconds
+
+==> res_6_9_3.txt <==
+Time taken by function: 4422000 microseconds
+
+==> res_6_9_4.txt <==
+Time taken by function: 3688335 microseconds
+
+==> res_6_9_5.txt <==
+Time taken by function: 3628910 microseconds
+
+==> res_6_9_6.txt <==
+Time taken by function: 5476732 microseconds
+
+==> res_6_9_7.txt <==
+Time taken by function: 5508608 microseconds
+
+==> res_6_9_8.txt <==
+Time taken by function: 3747831 microseconds
+
+==> res_6_9_9.txt <==
+Time taken by function: 4701227 microseconds
+
+==> res_6_10_1.txt <==
+Time taken by function: 3005552 microseconds
+
+==> res_6_10_2.txt <==
+Time taken by function: 2655087 microseconds
+
+==> res_6_10_3.txt <==
+Time taken by function: 2786605 microseconds
+
+==> res_6_10_4.txt <==
+Time taken by function: 2823337 microseconds
+
+==> res_6_10_5.txt <==
+Time taken by function: 3345530 microseconds
+
+==> res_6_10_6.txt <==
+Time taken by function: 2892465 microseconds
+
+==> res_6_10_7.txt <==
+Time taken by function: 4298365 microseconds
+
+==> res_6_10_8.txt <==
+Time taken by function: 5765138 microseconds
+
+==> res_6_10_9.txt <==
+Time taken by function: 5673981 microseconds
+
+==> res_6_10_10.txt <==
+Time taken by function: 4317401 microseconds
