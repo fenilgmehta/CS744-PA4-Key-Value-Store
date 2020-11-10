@@ -148,19 +148,6 @@ int main_mutex_speed(){
     return 0;
 }
 
-void db_testing() {
-    kvPersistentStore.init_kvstore();  // This is present in KVStore.hpp
-    for(int32_t i = 0; i < HASH_TABLE_LEN; ++i) {
-        if(not kvPersistentStore.file_exists_status.test(i)) continue;
-        kvPersistentStore.read_db_file(i);
-    }
-    // KVMessage kvm;
-    // kvm.set_key("asdf");
-    // kvm.set_value("1234");
-    // kvm.calculate_key_hash();
-    // kvPersistentStore.write_to_db(&kvm);
-}
-
 int main() {
     // return main_kv_message();
     // return main_file_io();
@@ -173,6 +160,23 @@ int main() {
     // vector<int> a;
     // a.push_back_emplace(1);
     // db_testing();
+    fstream fs;
+    fs.open("NewFileCreated.txt", std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
+    fs.write("asdf", 4);
+
+    fs.seekg(0, ios::beg);
+    char msg[5] = {};
+    fs.read(msg, 4);
+    cout << msg << endl;
+
+    fs.seekp(2, ios::beg);
+    fs.write("XY", 2);
+
+    fs.seekg(0, ios::beg);
+    fs.read(msg, 4);
+    cout << msg << endl;
+
+    fs.close();
 
     return 0;
 }

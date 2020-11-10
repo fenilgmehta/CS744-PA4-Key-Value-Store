@@ -345,8 +345,8 @@ void main_thread() {
     unsigned int client_len;
     int client_fd_new;
 
-    log_success("Server waiting for clients :) on port number" + std::to_string(serverConfig.listening_port), true,
-                true);
+    log_success("Server waiting for clients 😃 on port number = " + std::to_string(serverConfig.listening_port),
+                true, true);
 
     auto listIter = thread_pool.begin();
     while (true) {

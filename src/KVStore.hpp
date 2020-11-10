@@ -42,7 +42,7 @@ struct KVStore {
 
         // This is VERY IMPORTANT
         int changeDirResult = chdir("db");
-        if(changeDirResult != 0) {
+        if (changeDirResult != 0) {
             log_error("chdir(\"db\") failed :(");
             log_error("Exiting (status=65)");
             exit(65);
@@ -173,39 +173,41 @@ struct KVStore {
             // REFER: https://www.geeksforgeeks.org/c-program-to-create-a-file/
             // std::ios::app causes the file to be created BUT will insert all content
             // to the end of the file even after performing seekp(...)
-            fs.open(kvStoreFileNames[file_idx],
-                                   std::ios::out | std::ios::binary);
+            fs.open(kvStoreFileNames[file_idx], std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
 
-            if(!fs) {
+            if (!fs) {
                 log_error(std::string() + "    Failed to create file: \"" + kvStoreFileNames[file_idx] + "\"");
             } else {
                 log_info("    File successfully CREATED: " + std::string(kvStoreFileNames[file_idx]));
-            }
 
-            // IMPORTANT: insert "FILE_TABLE_LEN" number of blank entries
-            for (uint32_t i = 0; i < FILE_TABLE_LEN; ++i) {
-                fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
-                fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                // IMPORTANT: insert "FILE_TABLE_LEN" number of blank entries
+                for (uint32_t i = 0; i < FILE_TABLE_LEN; ++i) {
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                }
             }
-            fs.close();
+            // fs.close();
+        } else {
+            fs.open(kvStoreFileNames[file_idx], std::ios::in | std::ios::out | std::ios::binary);
         }
 
-        fs.open(kvStoreFileNames[file_idx], std::ios::in | std::ios::out | std::ios::binary);
-
-        if(fs.fail() || fs.eof()) {
-            log_error("fs.fail() OR fs.eof() for file = " + std::string(kvStoreFileNames[file_idx]));
+        if ((not fs.is_open()) || fs.fail() || fs.eof()) {
+            log_error("(not fs.is_open()) OR fs.fail() OR fs.eof() for file = " +
+                      std::string(kvStoreFileNames[file_idx]));
             return;
         }
         log_info(std::string() + "    File successfully OPENED: " + kvStoreFileNames[file_idx]);
 
-        uint64_t leftIdx=0, rightIdx=0, hash1_file=0, hash2_file=0;
+        const uint64_t inside_file_idx = (ptr->hash1) % FILE_TABLE_LEN;
+
+        // NOTE: the initialization of "leftIdx" to "inside_file_idx" is VERY IMPORTANT
+        uint64_t leftIdx = inside_file_idx, rightIdx = 0, hash1_file = 0, hash2_file = 0;
         char key_file[256];
 
-        const uint64_t inside_file_idx = (ptr->hash1) % FILE_TABLE_LEN;
         fs.seekg(get_seek_val(inside_file_idx));
         fs.read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
         fs.read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
@@ -230,6 +232,7 @@ struct KVStore {
 
         // SEARCH through the file and replace the the entry if found,
         // else create a new entry at the end of the file
+
         if (hash1_file == ptr->hash1 && hash2_file == ptr->hash2) {
             fs.read(reinterpret_cast<char *>(key_file), 256);
             if (std::equal(key_file, key_file + 256, ptr->key)) {
@@ -244,7 +247,7 @@ struct KVStore {
         log_info("    inside_file_idx = " + std::to_string(inside_file_idx));
         log_info("    leftIdx = " + std::to_string(leftIdx));
         log_info("    rightIdx = " + std::to_string(rightIdx));
-        log_info("    More then one entry found");
+        log_info("    Only one entry present in the Circular Doubly Linked List which did not match  -OR-  More than one entries found");
         uint64_t current_file_idx = rightIdx;
         while (current_file_idx != inside_file_idx) {
             log_info("        Working on idx = " + std::to_string(current_file_idx));
@@ -279,7 +282,9 @@ struct KVStore {
         fs.seekp(0, std::ios::end);  // moves the write pointer to the end of the file
 
         // REFER: https://www.tutorialspoint.com/tellp-in-file-handling-with-cplusplus
-        uint64_t new_entry_position = static_cast<uint64_t>(fs.tellp()) / 8;
+        uint64_t new_entry_position = static_cast<uint64_t>(fs.tellp()) / SIZE_OF_ONE_ENTRY;
+        log_info("    EOF bytes = " + std::to_string(fs.tellp()));
+        log_info("    EOF entry index = " + std::to_string(new_entry_position));
 
         fs.write(reinterpret_cast<const char *>(&leftIdx), sizeof(uint64_t));
         fs.write(reinterpret_cast<const char *>(&inside_file_idx), sizeof(uint64_t));
@@ -288,11 +293,24 @@ struct KVStore {
         fs.write(reinterpret_cast<const char *>(ptr->key), 256);
         fs.write(reinterpret_cast<const char *>(ptr->value), 256);
 
-        fs.seekp(get_seek_val(leftIdx) + sizeof(uint64_t));  // set pointer to rightIdx
-        fs.write(reinterpret_cast<const char *>(&new_entry_position), sizeof(uint64_t));
+        if (leftIdx == inside_file_idx) {
+            // This was the 2nd entry inserted
+            // So, leftIdx and rightIdx are to be updated for the first entry only
+            log_info("        Updating leftIdx and rightIdx for the first entry with index = " +
+                     std::to_string(inside_file_idx));
 
-        fs.seekp(get_seek_val(inside_file_idx));  // set pointer to leftIdx
-        fs.write(reinterpret_cast<const char *>(&new_entry_position), sizeof(uint64_t));
+            fs.seekp(get_seek_val(inside_file_idx));
+            fs.write(reinterpret_cast<const char *>(&new_entry_position), sizeof(uint64_t));
+            fs.write(reinterpret_cast<const char *>(&new_entry_position), sizeof(uint64_t));
+        } else {
+            // FOR the Left Hand Side entry, set pointer to FileEntry->rightIdx
+            fs.seekp(get_seek_val(leftIdx) + sizeof(uint64_t));
+            fs.write(reinterpret_cast<const char *>(&new_entry_position), sizeof(uint64_t));
+
+            // FOR the Right Hand Side entry, set pointer to FileEntry->leftIdx
+            fs.seekp(get_seek_val(inside_file_idx));
+            fs.write(reinterpret_cast<const char *>(&new_entry_position), sizeof(uint64_t));
+        }
 
         fs.close();
     }
@@ -339,14 +357,14 @@ struct KVStore {
                 // match found
                 file_fd[file_idx].seekg(get_seek_val(inside_file_idx));
 
-                if (leftIdx == rightIdx) {
+                if (leftIdx == rightIdx && leftIdx == inside_file_idx) {
                     // NOTE: this should be true if there is only one entry for this "inside_file_idx"
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                     // NOTE: No need of clearing the key-value content as we know that the
-                    // Doubly Linked List is emptfy from the value of leftIdx and rightIdx
+                    //       Doubly Linked List is empty from the value of leftIdx and rightIdx
                     // file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
                     // file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
                 } else if (rightIdx == MAX_UINT64) {
@@ -358,27 +376,31 @@ struct KVStore {
                     //       This will work even if there are only two entries
                     idx_of_key_to_delete = inside_file_idx;
 
-                    // read RHS of node to delete
+                    // read RHS entry of node to delete
                     file_fd[file_idx].seekg(get_seek_val(rightIdx) + sizeof(uint64_t));
                     file_fd[file_idx].read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
                     file_fd[file_idx].read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
                     file_fd[file_idx].read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
                     file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
                     file_fd[file_idx].read(reinterpret_cast<char *>(value_file), 256);
+
                     // TODO: verity the below seek statement
-                    // delete the RHS of node to delete
+                    // delete the RHS entry of the node to delete (i.e. idx_of_key_to_delete)
                     file_fd[file_idx].seekg(-SIZE_OF_ONE_ENTRY, std::ios::cur);
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    // NOTE: No need of clearing the key-value content as we know that the
+                    //       Doubly Linked List is empty from the value of leftIdx and rightIdx
+                    // file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    // file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
 
                     // update leftIdx of RHS of RHS of NodeToDelete
                     file_fd[file_idx].seekg(get_seek_val(rightIdx));
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&idx_of_key_to_delete), sizeof(uint64_t));
 
+                    // REPLACE the content of first node with the content of 2nd node
                     file_fd[file_idx].seekg(get_seek_val(idx_of_key_to_delete) + sizeof(uint64_t));
                     // leftIdx remain unchanged for "idx_of_key_to_delete"
                     file_fd[file_idx].write(reinterpret_cast<const char *>(&rightIdx), sizeof(uint64_t));
@@ -459,11 +481,11 @@ struct KVStore {
         uint64_t leftIdx, rightIdx, hash1_file, hash2_file;
         char key_file[256], value_file[256];
 
-        int32_t i = -1;
+        int32_t i = 0;
         // fs.seekg(get_seek_val(1000));
         while (fs.is_open() && (not fs.eof())) {
             fs.read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
-            if(not (fs.is_open() && (not fs.eof()))) break;
+            if (not(fs.is_open() && (not fs.eof()))) break;
 
             fs.read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
             fs.read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
@@ -477,11 +499,12 @@ struct KVStore {
             }
 
             log_info("tellg() = " + std::to_string(fs.tellg()), true);
-            log_info(std::string() + std::to_string(i)+","
+            log_info(std::to_string(i - 1) + " --> "
                      + std::to_string(leftIdx) + "," + std::to_string(rightIdx)
                      + "," + std::to_string(hash1_file) + "," + std::to_string(hash2_file)
                      + "," + key_file + "," + value_file);
         }
+
         log_info(std::string() + "File entries count = " + std::to_string(i), true);
         fs.close();
     }

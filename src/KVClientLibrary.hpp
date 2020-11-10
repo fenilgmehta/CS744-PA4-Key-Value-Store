@@ -72,7 +72,7 @@ struct ClientServerConnection {
     }
 
     ~ClientServerConnection() {
-        log_info("Closing the socket connection...");
+        log_info("Closing the socket connection...", true, true);
         close(socketFD);
     }
 

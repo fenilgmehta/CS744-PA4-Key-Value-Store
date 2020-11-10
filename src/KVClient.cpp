@@ -253,7 +253,14 @@ std::vector<std::string> load_client_request_results(char *filename) {
 }
 
 int main(int argc, char *argv[]) {
-    // ./KVClient REQUESTS_FILE_NAME 127.0.0.1 12345
+    if (argc == 1) {
+        cout << "Usage:"
+             << "\n./" << argv[0] << " REQUESTS_FILE 127.0.0.1 12345"
+             << "\n./" << argv[0] << " REQUESTS_FILE 127.0.0.1 12345 REQUESTS_FILE_SOLUTION"
+             << "\n\nNOTE: replace the IP address and the PORT number with that of the \"KVServer\"\n";
+        return 0;
+    }
+
     // REFER: https://www.geeksforgeeks.org/command-line-arguments-in-c-cpp/
     if (argc >= 2) {
         log_info("Loading client requests dataset...", true);
@@ -279,8 +286,6 @@ int main(int argc, char *argv[]) {
         auto stop = high_resolution_clock::now();
         auto duration = duration_cast<microseconds>(stop - start);
         cout << "Time taken by function: " << duration.count() << " microseconds" << endl;
-
-        return 0;
     }
 
     return 0;

@@ -47,8 +47,8 @@
   
 - Automatic Testing: these Python 3 scripts can be used to generate testing dataset and be passed to KVClient.cpp for sending the requests to the KVServer.cpp
   ```sh
-  request_count=5000
-  file_name="client_request_006.txt"
+  request_count=50000
+  file_name="client_request_007.txt"
   
   file_name_without_extension="${file_name%.*}"  # REFER: https://stackoverflow.com/questions/965053/extract-filename-and-extension-in-bash
   file_sol="${file_name_without_extension}_sol.txt"
