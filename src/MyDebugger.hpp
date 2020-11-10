@@ -21,31 +21,20 @@ enum Code {
 };
 
 #define color(enum_code) "\033[" << enum_code << "m"
+#define GET_TID() (std::hash<std::thread::id>{}(std::this_thread::get_id()) % 10000000)
 
 // NOTE: TID is Thread ID
 // REFER: https://www.geeksforgeeks.org/thread-get_id-function-in-c/
 
 // TODO: comment this line when doing performance testing and when using IDE CmakeLists.txt
-#define DEBUGGING_ON
+// #define DEBUGGING_ON
 
 #ifdef DEBUGGING_ON
 
 // REFER: https://stackoverflow.com/questions/7432100/how-to-get-integer-thread-id-in-c11
-#define GET_TID() (std::hash<std::thread::id>{}(std::this_thread::get_id()) % 10000000)
 // (std::this_thread::get_id())
 
     std::mutex loggerMutex;
-
-    /* Yellow message */
-    template <typename T>
-    void log_warning(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false) {
-        loggerMutex.lock();
-        if(prependNewLine) std::cerr << '\n';
-        std::cerr << color(FG_YELLOW) << "WARNING [TID=" << GET_TID() << "] : " << color(FG_DEFAULT) << msg << '\n';
-        if(appendExtraNewLine) std::cerr << '\n';
-        std::cerr.flush();
-        loggerMutex.unlock();
-    }
 
     /* Blue message */
     template <typename T>
@@ -58,35 +47,43 @@ enum Code {
         loggerMutex.unlock();
     }
 
-    /* Green message */
+    /* Yellow message */
     template <typename T>
-    void log_success(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false) {
-        loggerMutex.lock();
-        if(prependNewLine) std::cout << '\n';
-        std::cout << color(FG_GREEN) << "SUCCESS [TID=" << GET_TID() << "] : " << color(FG_DEFAULT) << msg << '\n';
-        if(appendExtraNewLine) std::cout << '\n';
-        std::cout.flush();
-        loggerMutex.unlock();
+    void log_warning(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false) {
+        if(prependNewLine) std::cerr << '\n';
+        std::cerr << color(FG_YELLOW) << "WARNING [TID=" << GET_TID() << "] : " << color(FG_DEFAULT) << msg << '\n';
+        if(appendExtraNewLine) std::cerr << '\n';
+        std::cerr.flush();
     }
-
-#undef GET_TID
 
 #else
 
-    template<typename T>
-    void log_warning(const T &msg, bool prependNewLine = false, bool appendExtraNewLine = false) {}
+    // template<typename T>
+    // void log_info(const T &msg, bool prependNewLine = false, bool appendExtraNewLine = false) {}
 
-    template<typename T>
-    void log_info(const T &msg, bool prependNewLine = false, bool appendExtraNewLine = false) {}
+    #define log_info(...) ;
+    #define log_warning(...) ;
 
-    template<typename T>
-    void log_success(const T &msg, bool prependNewLine = false, bool appendExtraNewLine = false) {}
-
-    // #define log_warning(...) ;
-    // #define log_info(...) ;
-    // #define log_success(...) ;
 #endif
 
+
+/* Yellow message */
+template <typename T>
+void log_error_warning(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false) {
+    if(prependNewLine) std::cerr << '\n';
+    std::cerr << color(FG_YELLOW) << "WARNING [TID=" << GET_TID() << "] : " << color(FG_DEFAULT) << msg << '\n';
+    if(appendExtraNewLine) std::cerr << '\n';
+    std::cerr.flush();
+}
+
+/* Green message */
+template <typename T>
+void log_success(const T& msg, bool prependNewLine = false, bool appendExtraNewLine = false) {
+    if(prependNewLine) std::cout << '\n';
+    std::cout << color(FG_GREEN) << "SUCCESS [TID=" << GET_TID() << "] : " << color(FG_DEFAULT) << msg << '\n';
+    if(appendExtraNewLine) std::cout << '\n';
+    std::cout.flush();
+}
 
 /* Red message */
 template <typename T>
@@ -97,6 +94,7 @@ void log_error(const T& msg, bool prependNewLine = false, bool appendExtraNewLin
     std::cerr.flush();
 }
 
+#undef GET_TID
 #undef color
 
 #endif // PA_4_KEY_VALUE_STORE_MYDEBUGGER_H

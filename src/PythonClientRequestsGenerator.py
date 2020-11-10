@@ -6,6 +6,9 @@ def getCode(length = 10, char = string.ascii_uppercase + string.ascii_lowercase 
 	return ''.join(random.choice( char) for x in range(length))
 
 
+print("Key/Value length: ", file=sys.stderr)
+kvlen = int(input())
+
 print("Enter the number of requests to generate: ", file=sys.stderr)
 n = int(input())
 
@@ -14,12 +17,14 @@ req_put = list() # 2
 req_del = list() # 3
 req = list()
 
-for i in range(int(n*0.2)):
-	k,v = getCode(10), getCode(10)
+initial_put = 0.20
+
+for i in range(int(n*initial_put)):
+	k,v = getCode(kvlen), getCode(kvlen)
 	req_put.append(("2",k,v))
 	req.append(req_put[-1])
 
-for i in range(int(n*0.2), n):
+for i in range(int(n*initial_put), n):
 	ch = random.choice([1,2,3])
 	if ch == 1:
 		# READ: only key
@@ -28,7 +33,7 @@ for i in range(int(n*0.2), n):
 	elif ch == 2:
 		# PUT: key and value
 		if random.choice([0,1]) == 1:  # add new value
-			k,v = getCode(10), getCode(10)
+			k,v = getCode(kvlen), getCode(kvlen)
 			rchoice = ("2",k,v)
 		else:
 			rchoice = random.choice(req_put)

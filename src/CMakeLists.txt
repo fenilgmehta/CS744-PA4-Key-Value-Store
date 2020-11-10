@@ -71,7 +71,7 @@ add_executable(KVClient KVClient.cpp)
 #)
 
 add_executable(Testing Testing.cpp)
-add_executable(Testing_Database Testing_Database.cpp)
+add_executable(TestingDatabase TestingDatabase.cpp)
 
 # ---------------------------------------------------------------------------------------------------------------------
 

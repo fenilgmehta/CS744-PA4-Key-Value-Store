@@ -18,3 +18,22 @@ for i in range(n):
 			print("-SUCCESS-")
 		else:
 			print("-ERROR-")
+
+'''
+
+print(kv, file=open("temp.dictionary", "w+"))
+
+import random
+kv = eval(open('temp.dictionary', 'r').read())
+fff = open('client_request_009.txt', "w+")
+fffsol = open('client_request_009_sol.txt', "w+")
+kvkeylist = list(kv.keys()); random.shuffle(kvkeylist)
+print(len(kv),file=fff)
+print(len(kv),file=fffsol)
+for i in kvkeylist:
+    key=i#random.choice(kvkeylist)
+    val1 = kv[key]
+    print(f"1 {key}", file=fff,flush=True)
+    print(f"{val1}", file=fffsol,flush=True)
+
+'''

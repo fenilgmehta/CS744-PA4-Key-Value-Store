@@ -129,6 +129,8 @@ struct WorkerThreadInfo {
 struct WorkerThreadInfo WorkerThreadInfo_DEFAULT();
 
 struct ServerConfig *global_server_config;
+struct KVCache *globalKVCache;
+
 
 void *worker_thread(void *ptr) {
     auto thread_conf = static_cast<struct WorkerThreadInfo *>(ptr);
@@ -151,6 +153,7 @@ void *worker_thread(void *ptr) {
 
     while (true) {
         // Use epoll and serve clients using KVCache/KVStore
+        // REFER: https://suchprogramming.com/epoll-in-3-easy-steps/
         // REFER: https://stackoverflow.com/questions/46591671/epoll-wait-events-buffer-reset
         // log_info("Calling \"epoll\"");
         event_count = epoll_wait(epollfd, events, global_server_config->clients_per_thread, 3000);
@@ -158,6 +161,7 @@ void *worker_thread(void *ptr) {
         thread_conf->mutex_serving_clients.lock();
         if (event_count != -1) {
             for (int i = 0; i < event_count; i++) {
+                // REFER: https://stackoverflow.com/questions/52976152/tcp-when-is-epollhup-generated
                 if (events[i].events & EPOLLERR || events[i].events & EPOLLHUP || (!(events[i].events & EPOLLIN))) {
                     log_error(std::string() + "cerr: Epoll event error = \"" + std::to_string(events[i].events) + "\"");
                     // close(events[i].data.fd);
@@ -188,7 +192,9 @@ void *worker_thread(void *ptr) {
                 read(events[i].data.fd, reinterpret_cast<void *>(message.key), 256);
                 message.calculate_key_hash();  // This was to be done by CACHE, but CACHE is skipped
                 if (message.is_request_code_GET()) {
-                    bool res = kvPersistentStore.read_from_db(&message);
+                    // TODO: verify cache
+                    // bool res = kvPersistentStore.read_from_db(&message);
+                    bool res = thread_conf->kv_cache->cache_GET(&message);
                     write(
                             events[i].data.fd,
                             reinterpret_cast<const void *>(
@@ -206,7 +212,9 @@ void *worker_thread(void *ptr) {
                     );
                 } else if (message.is_request_code_PUT()) {
                     read(events[i].data.fd, reinterpret_cast<void *>(message.value), 256);
-                    kvPersistentStore.write_to_db(&message);
+                    // TODO: verify cache
+                    // kvPersistentStore.write_to_db(&message);
+                    thread_conf->kv_cache->cache_PUT(&message);
                     write(
                             events[i].data.fd,
                             reinterpret_cast<const void *>(&KVMessage::StatusCodeValueSUCCESS),
@@ -214,7 +222,9 @@ void *worker_thread(void *ptr) {
                     );
                 } else {
                     // DELETE request code
-                    bool res = kvPersistentStore.delete_from_db(&message);
+                    // TODO: verify cache
+                    // bool res = kvPersistentStore.delete_from_db(&message);
+                    bool res = thread_conf->kv_cache->cache_DELETE(&message);
                     write(
                             events[i].data.fd,
                             reinterpret_cast<const void *>(
@@ -263,7 +273,6 @@ void *worker_thread(void *ptr) {
 // ---------------------------------------------------------------------------------------------------------------------
 
 std::list<WorkerThreadInfo> *global_thread_pool;
-struct KVCache *globalKVCache;
 
 void main_thread() {
     log_info("+ Server initialization started...");
@@ -422,9 +431,13 @@ void signal_callback_handler(int signalNumber) {
                  std::to_string(global_thread_pool->size()));
         i.mutex_serving_clients.lock();
     }
-    log_info("Performing cache cleanup");
-    // if (globalKVCache != nullptr)
-    //     globalKVCache->cache_clean();
+
+    if (globalKVCache != nullptr) {
+        log_info("Performing cache cleanup");
+        globalKVCache->cache_clean();
+        log_success("Cache cleaning complete :)", true);
+    }
+
     log_success("Server cleanup complete :)", true, true);
     exit(0);
 }

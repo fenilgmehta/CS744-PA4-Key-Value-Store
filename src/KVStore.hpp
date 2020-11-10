@@ -14,8 +14,8 @@
 
 // Number of linked-lists that point to circular lists of "CacheNode"
 // The number of files in the Persistent Storage is equal to the below value
-const uint_fast32_t HASH_TABLE_LEN = 16384;
-const uint_fast64_t FILE_TABLE_LEN = 1000;
+const uint_fast32_t HASH_TABLE_LEN = 1021;  // REFER: http://www.factors-of.com/prime-numbers-before/Prime-numbers-from-1-to_1024_
+const uint_fast64_t FILE_TABLE_LEN = 8191;  // REFER:
 const uint_fast64_t MAX_UINT64 = std::numeric_limits<uint64_t>::max();
 const char EMPTY_STRING[256] = {};
 
@@ -25,7 +25,6 @@ const char EMPTY_STRING[256] = {};
 //     char Key[256], char Value[256]
 struct KVStore {
     std::array<std::shared_mutex, HASH_TABLE_LEN> file_locks;
-    std::array<std::fstream, HASH_TABLE_LEN> file_fd;
     std::bitset<HASH_TABLE_LEN> file_exists_status;
 
     KVStore() = default;
@@ -329,8 +328,9 @@ struct KVStore {
             return false;
         }
 
-        file_fd[file_idx].open(kvStoreFileNames[file_idx], std::ios::in | std::ios::out | std::ios::binary);
-        if ((not file_fd[file_idx].is_open()) || file_fd[file_idx].fail()) {
+        std::fstream fs;
+        fs.open(kvStoreFileNames[file_idx], std::ios::in | std::ios::out | std::ios::binary);
+        if ((not fs.is_open()) || fs.fail()) {
             log_error(std::string("") + "Unable to open Database File: \"" + kvStoreFileNames[file_idx] + "\"");
             return false;
         }
@@ -339,34 +339,34 @@ struct KVStore {
         char key_file[256], value_file[256];
 
         const uint64_t inside_file_idx = (ptr->hash1) % FILE_TABLE_LEN;
-        file_fd[file_idx].seekg(get_seek_val(inside_file_idx));
-        file_fd[file_idx].read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
-        file_fd[file_idx].read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
-        file_fd[file_idx].read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
-        file_fd[file_idx].read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
+        fs.seekg(get_seek_val(inside_file_idx));
+        fs.read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
+        fs.read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
+        fs.read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
+        fs.read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
 
         if (is_file_entry_empty(leftIdx, rightIdx)) {
-            file_fd[file_idx].close();
+            fs.close();
             return false;
         }
 
         // First entry matches the "Key"
         if (hash1_file == ptr->hash1 && hash2_file == ptr->hash2) {
-            file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
+            fs.read(reinterpret_cast<char *>(key_file), 256);
             if (std::equal(key_file, key_file + 256, ptr->key)) {
                 // match found
-                file_fd[file_idx].seekg(get_seek_val(inside_file_idx));
+                fs.seekg(get_seek_val(inside_file_idx));
 
                 if (leftIdx == rightIdx && leftIdx == inside_file_idx) {
                     // NOTE: this should be true if there is only one entry for this "inside_file_idx"
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                     // NOTE: No need of clearing the key-value content as we know that the
                     //       Doubly Linked List is empty from the value of leftIdx and rightIdx
-                    // file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
-                    // file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    // fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    // fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
                 } else if (rightIdx == MAX_UINT64) {
                     log_error("delete_from_db(...) rightIdx==MAXUINT64 case should have been handled earlier, "
                               "leftIdx = " + std::to_string(leftIdx) + ", rightIdx = " + std::to_string(rightIdx));
@@ -377,54 +377,54 @@ struct KVStore {
                     idx_of_key_to_delete = inside_file_idx;
 
                     // read RHS entry of node to delete
-                    file_fd[file_idx].seekg(get_seek_val(rightIdx) + sizeof(uint64_t));
-                    file_fd[file_idx].read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
-                    file_fd[file_idx].read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
-                    file_fd[file_idx].read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
-                    file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
-                    file_fd[file_idx].read(reinterpret_cast<char *>(value_file), 256);
+                    fs.seekg(get_seek_val(rightIdx) + sizeof(uint64_t));
+                    fs.read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
+                    fs.read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
+                    fs.read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
+                    fs.read(reinterpret_cast<char *>(key_file), 256);
+                    fs.read(reinterpret_cast<char *>(value_file), 256);
 
                     // TODO: verity the below seek statement
                     // delete the RHS entry of the node to delete (i.e. idx_of_key_to_delete)
-                    file_fd[file_idx].seekg(-SIZE_OF_ONE_ENTRY, std::ios::cur);
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.seekg(-SIZE_OF_ONE_ENTRY, std::ios::cur);
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
                     // NOTE: No need of clearing the key-value content as we know that the
                     //       Doubly Linked List is empty from the value of leftIdx and rightIdx
-                    // file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
-                    // file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    // fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    // fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
 
                     // update leftIdx of RHS of RHS of NodeToDelete
-                    file_fd[file_idx].seekg(get_seek_val(rightIdx));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&idx_of_key_to_delete), sizeof(uint64_t));
+                    fs.seekg(get_seek_val(rightIdx));
+                    fs.write(reinterpret_cast<const char *>(&idx_of_key_to_delete), sizeof(uint64_t));
 
                     // REPLACE the content of first node with the content of 2nd node
-                    file_fd[file_idx].seekg(get_seek_val(idx_of_key_to_delete) + sizeof(uint64_t));
+                    fs.seekg(get_seek_val(idx_of_key_to_delete) + sizeof(uint64_t));
                     // leftIdx remain unchanged for "idx_of_key_to_delete"
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&rightIdx), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&(hash1_file)), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&(hash2_file)), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(key_file), 256);
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(value_file), 256);
+                    fs.write(reinterpret_cast<const char *>(&rightIdx), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&(hash1_file)), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&(hash2_file)), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(key_file), 256);
+                    fs.write(reinterpret_cast<const char *>(value_file), 256);
                 }
 
-                file_fd[file_idx].close();
+                fs.close();
                 return true;
             }
         }
 
         uint64_t current_file_idx = rightIdx;
         while (current_file_idx != inside_file_idx) {
-            file_fd[file_idx].seekg(get_seek_val(current_file_idx));
-            file_fd[file_idx].read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
-            file_fd[file_idx].read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
-            file_fd[file_idx].read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
-            file_fd[file_idx].read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
+            fs.seekg(get_seek_val(current_file_idx));
+            fs.read(reinterpret_cast<char *>(&leftIdx), sizeof(uint64_t));
+            fs.read(reinterpret_cast<char *>(&rightIdx), sizeof(uint64_t));
+            fs.read(reinterpret_cast<char *>(&(hash1_file)), sizeof(uint64_t));
+            fs.read(reinterpret_cast<char *>(&(hash2_file)), sizeof(uint64_t));
 
             if (hash1_file == ptr->hash1 && hash2_file == ptr->hash2) {
-                file_fd[file_idx].read(reinterpret_cast<char *>(key_file), 256);
+                fs.read(reinterpret_cast<char *>(key_file), 256);
                 if (std::equal(key_file, key_file + 256, ptr->key)) {
                     // match found
 
@@ -433,23 +433,23 @@ struct KVStore {
                     // b. Node between head and tail of Doubly Linked List is to be deleted
 
                     // Delete the node
-                    file_fd[file_idx].seekg(get_seek_val(current_file_idx));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    fs.seekg(get_seek_val(current_file_idx));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&MAX_UINT64), sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
+                    fs.write(reinterpret_cast<const char *>(EMPTY_STRING), 256);
 
                     // Update rightIdx of LHS of node to delete
-                    file_fd[file_idx].seekg(get_seek_val(leftIdx) + sizeof(uint64_t));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&rightIdx), sizeof(uint64_t));
+                    fs.seekg(get_seek_val(leftIdx) + sizeof(uint64_t));
+                    fs.write(reinterpret_cast<const char *>(&rightIdx), sizeof(uint64_t));
 
                     // Update leftIdx of head node
-                    file_fd[file_idx].seekg(get_seek_val(rightIdx));
-                    file_fd[file_idx].write(reinterpret_cast<const char *>(&leftIdx), sizeof(uint64_t));
+                    fs.seekg(get_seek_val(rightIdx));
+                    fs.write(reinterpret_cast<const char *>(&leftIdx), sizeof(uint64_t));
 
-                    file_fd[file_idx].close();
+                    fs.close();
                     return true;
                 }
             }
@@ -457,7 +457,7 @@ struct KVStore {
             current_file_idx = rightIdx;
         }
 
-        file_fd[file_idx].close();
+        fs.close();
 
         // Entry not found
         return false;

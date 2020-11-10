@@ -41,17 +41,17 @@ void start_sending_requests(std::vector<KVMessage> &dataset, const char *server_
 
     press_enter_to_continue("Press ENTER to continue with sending the requests");
 
-    int32_t request_number = 1;
+    int32_t request_number = 0;
     for (auto &i : dataset) {
         i.fix_key_nulling();
+
+        ++request_number;
 
         log_info(string("Working on Request Number = ") + to_string(request_number), true);
         log_info(string("    ") + "Request code = " + to_string(i.status_code)
                  + " [" + i.status_code_to_string() + "]");
         log_info(string("    ") + "Key = " + i.key);
         if (i.is_request_code_PUT()) log_info(string("    ") + "Message = " + i.value);
-
-        ++request_number;
 
         // No other case is possible because they are handled while reading the dataset file
         switch (i.status_code) {
@@ -78,10 +78,10 @@ void auto_testing(std::vector<KVMessage> &dataset, const char *server_ip,
     log_info(string() + "Port Number = " + server_port);
     log_info("-----+-----+-----+-----");
     log_info(string() + "Dataset Size = " + to_string(dataset.size()));
-    // for (auto &i : dataset) {
-    //     log_info(string("") + to_string((int) i.status_code) + " " + i.key + " " +
-    //              ((i.status_code == KVMessage::EnumGET) ? i.value : " "));
-    // }
+    for (auto &i : dataset) {
+        log_info(string("") + to_string((int) i.status_code) + " " + i.key + " " +
+                 ((i.status_code == KVMessage::EnumGET) ? i.value : " "));
+    }
     log_info("-----+-----+-----+-----");
 #endif
 
@@ -92,12 +92,11 @@ void auto_testing(std::vector<KVMessage> &dataset, const char *server_ip,
     int32_t request_number = 1;
     log_info("AUTO Testing begins now...");
     int32_t errorCount = 0;
-    for (size_t i = 0; i < dataset.size(); ++i) {
+    for (size_t i = 0; i < dataset.size(); ++i, ++request_number) {
         KVMessage &kvMessage = dataset.at(i);
         kvMessage.fix_key_nulling();
 
         if (kvMessage.is_request_code_PUT()) log_info(string("    ") + "Message = " + kvMessage.value);
-        ++request_number;
 
         // No other case is possible because they are handled while reading the dataset file
         switch (kvMessage.status_code) {
@@ -114,9 +113,13 @@ void auto_testing(std::vector<KVMessage> &dataset, const char *server_ip,
                 } else {
                     ++errorCount;
                     log_error(string("Request Number = ") + to_string(request_number), true);
-                    log_info(string("    ") + "Request code = " + to_string(kvMessage.status_code) + " [" +
+                    log_error(string("    ") + "Request code = " + to_string(kvMessage.status_code) + " [" +
                              kvMessage.status_code_to_string() + "]");
-                    log_info(string("    ") + "Key = " + kvMessage.key);
+                    log_error(string("    ") + "Key = " + kvMessage.key);
+                    log_error(string("    ") + "connection.resultStatusCode = " + to_string(connection.resultStatusCode));
+                    log_error(string("    ") + "connection.resultValue = " + connection.resultValue);
+                    log_error(string("    ") + "dataset_results.at(i) = " + dataset_results.at(i));
+                    exit(1);
                 }
 
                 // if (not equal(kvMessage.value, kvMessage.value + 256, connection.resultValue)) {
@@ -137,10 +140,13 @@ void auto_testing(std::vector<KVMessage> &dataset, const char *server_ip,
                 } else {
                     ++errorCount;
                     log_error(string("Request Number = ") + to_string(request_number), true);
-                    log_info(string("    ") + "Request code = " + to_string(kvMessage.status_code) + " [" +
+                    log_error(string("    ") + "Request code = " + to_string(kvMessage.status_code) + " [" +
                              kvMessage.status_code_to_string() + "]");
-                    log_info(string("    ") + "Key = " + kvMessage.key);
-                    log_info(string("    ") + "Value = " + kvMessage.value);
+                    log_error(string("    ") + "Key = " + kvMessage.key);
+                    log_error(string("    ") + "Value = " + kvMessage.value);
+                    log_error(string("    ") + "connection.resultStatusCode = " + to_string(connection.resultStatusCode));
+                    log_error(string("    ") + "dataset_results.at(i) = " + dataset_results.at(i));
+                    exit(1);
                 }
                 break;
             case KVMessage::EnumDEL:
@@ -155,9 +161,12 @@ void auto_testing(std::vector<KVMessage> &dataset, const char *server_ip,
                 } else {
                     ++errorCount;
                     log_error(string("Request Number = ") + to_string(request_number), true);
-                    log_info(string("    ") + "Request code = " + to_string(kvMessage.status_code) + " [" +
+                    log_error(string("    ") + "Request code = " + to_string(kvMessage.status_code) + " [" +
                              kvMessage.status_code_to_string() + "]");
-                    log_info(string("    ") + "Key = " + kvMessage.key);
+                    log_error(string("    ") + "Key = " + kvMessage.key);
+                    log_error(string("    ") + "connection.resultStatusCode = " + to_string(connection.resultStatusCode));
+                    log_error(string("    ") + "dataset_results.at(i) = " + dataset_results.at(i));
+                    exit(1);
                 }
                 break;
         }

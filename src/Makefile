@@ -7,10 +7,9 @@ SERVER_DEPENDENTS = $(CUSTOM_HPPS) KVMessage.hpp KVCache.hpp KVStore.hpp
 # -------------------------------------------------------
 
 # REFER: https://stackoverflow.com/questions/1452671/disable-all-gcc-warnings
-CXXFLAGS_FINAL=-std=c++17 -pthread -O2 -w
+CXXFLAGS_FINAL=-std=c++17 -pthread -O3 -w
 
 all: final_start KVClient KVServer final_end
-	@echo "\nFINAL Build complete :)"
 
 final_start:
 	@echo "FINAL Build Started...\n"
@@ -50,4 +49,4 @@ KVStoreFileNames_DEBUG.obj: KVStoreFileNames.cpp KVStoreFileNames.h
 # -------------------------------------------------------
 
 clean:
-	rm -f KVClient KVServer KVClient_db KVServer_db *.o
+	rm -f KVClient KVServer KVClient_db KVServer_db *.o KVStoreFileNames_FINAL.obj KVStoreFileNames_DEBUG.obj
