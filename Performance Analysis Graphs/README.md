@@ -38,6 +38,7 @@
 
 
 ### Graphs Details
+
 - Throughput vs Load
 	- Requests served per second vs Total Load
 		- Graph Title    : Throughput vs Load
