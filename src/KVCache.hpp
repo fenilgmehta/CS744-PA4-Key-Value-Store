@@ -150,7 +150,7 @@ struct KVCache {
             lruTableInsertIdx(0),
             lruEvictionIdx(0) {
         // TODO - verify if anything more is required - implement the constructor
-        cacheNodeMemoryPool.init(cache_size + CACHE_TABLE_LEN, 2);
+        cacheNodeMemoryPool.init(cache_size, 2);
     }
 
     /* ASSUMED: ptr->key is correctly filled in ptr
