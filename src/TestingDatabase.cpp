@@ -83,14 +83,14 @@ int main(int argc, char *argv[]) {
     if (argc == 1) {
         cout << "Usage:"
              << "\n./a.out . KEY"
-             << "\n./a.out . w KEY VALUE [HASH]"
-             << "\n./a.out . d KEY [HASH]"
-             << "\n./a.out . r KEY [HASH]"
-             << "\n./a.out . send IP PORT w KEY VALUE"
-             << "\n./a.out . send IP PORT d KEY"
-             << "\n./a.out . send IP PORT r KEY"
-             << "\n./a.out ."
-             << "\n./a.out DB_FILE_NAME [DB_FILE_NAME [...]]\n";
+             << "\n./a.out . w KEY VALUE [HASH]                     WRITE data directly to the database. If HASH is passed, then hash1==hash2"
+             << "\n./a.out . d KEY [HASH]                           DELETE data directly from the database. If HASH is passed, then hash1==hash2"
+             << "\n./a.out . r KEY [HASH]                           READ data directly from the database. If HASH is passed, then hash1==hash2"
+             << "\n./a.out . send IP PORT w KEY VALUE               Make WRITE request to the server"
+             << "\n./a.out . send IP PORT d KEY                     Make DELETE request to the server"
+             << "\n./a.out . send IP PORT r KEY                     Make READ request to the server"
+             << "\n./a.out .                                        This will READ ALL DATABASE entries"
+             << "\n./a.out DB_FILE_NAME [DB_FILE_NAME [...]]        Read database with name DB_FILE_NAME\n";
         return 0;
     }
     // Compiled using:
@@ -112,11 +112,11 @@ int main(int argc, char *argv[]) {
         log_info("Hash2 for \"" + string(argv[2]) + "\"= " + to_string(message.hash2));
         log_info("File Name  = Hash1 % " + to_string(HASH_TABLE_LEN) + " = " +
                  to_string(message.hash1 % HASH_TABLE_LEN));
-        log_info("File Index = Hash1 %  " + to_string(1000) + " = " + to_string(message.hash1 % FILE_TABLE_LEN));
+        log_info("File Index = Hash1 % " + to_string(FILE_TABLE_LEN) + " = " + to_string(message.hash1 % FILE_TABLE_LEN));
     } else if (argc >= 4 && argv[1][0] == '.') {
         KVMessage message;
         message.set_key(argv[3]);
-
+        message.calculate_key_hash();
         if (argv[2][0] == 'w') {
             // WRITE to file
             // INPUT:
