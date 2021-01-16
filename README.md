@@ -20,6 +20,8 @@
 
 ##### Execute this before running the server: `mkdir -p db ; chmod 777 db ;` - otherwise the server won't be able to write to the database folder/directory
 
+##### Refer [README - Proof of correctness.sh](./README%20-%20Proof%20of%20correctness.sh) to verify that `KVServer.cpp`, `KVClient.cpp`, `KVCache.hpp`, `KVStore.chpp`, `KVClientLibrary.hpp` and `KVMessage.hpp` are working correctly.
+
 - Compiling Server and Client
 
     ```sh
@@ -83,8 +85,6 @@
     make debug
     ./KVClient_db ${file_name} 127.0.0.1 ${server_port_number} ${file_sol} 
     ```
-
-- Refer [README - Proof of correctness.sh](./README%20-%20Proof%20of%20correctness.sh) to verify that `KVServer.cpp`, `KVClient.cpp`, `KVCache.hpp`, `KVStore.chpp`, `KVClientLibrary.hpp` and `KVMessage.hpp` are working correctly.
 
 
 ### Implementation Details
