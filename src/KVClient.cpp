@@ -32,7 +32,7 @@ void start_sending_requests(std::vector<KVMessage> &dataset, const char *server_
     log_info(dataset.size());
     for (auto &i : dataset) {
         log_info(string("") + to_string((int) i.status_code) + " " + i.key + " " +
-                 ((i.status_code == KVMessage::EnumGET) ? i.value : " "));
+                 ((i.status_code == KVMessage::EnumPUT) ? i.value : " "));
     }
     log_info("-----+-----+-----");
 #endif
@@ -80,7 +80,7 @@ void auto_testing(std::vector<KVMessage> &dataset, const char *server_ip,
     log_info(string() + "Dataset Size = " + to_string(dataset.size()));
     for (auto &i : dataset) {
         log_info(string("") + to_string((int) i.status_code) + " " + i.key + " " +
-                 ((i.status_code == KVMessage::EnumGET) ? i.value : " "));
+                 ((i.status_code == KVMessage::EnumPUT) ? i.value : " "));
     }
     log_info("-----+-----+-----+-----");
 #endif
