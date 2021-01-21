@@ -113,6 +113,7 @@
 
 ### REFERENCES
 
+- [Approximate Design on Paper](./Design%20on%20Paper.pdf)
 - [PintOS Thread API](https://github.com/guilload/cs140/blob/master/ps0/pintos_thread.h)
     - [PintOS code](http://people.cs.ksu.edu/~bstinson/courses/cis520/grandepintos.proj1/threads/synch.c)
 - [How to make a circular queue thread safe](https://stackoverflow.com/questions/15751410/how-do-i-make-a-circular-queue-thread-safe)
